@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../navigation/app_routes.dart';
 import '../models/post_item.dart';
 import '../models/story_item.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/feed_post.dart';
 import '../widgets/stories.dart';
 import '../widgets/top_bar.dart';
+import 'notifications_page.dart';
 import 'create_post_page.dart';
+import 'create_short_page.dart';
+import 'search_page.dart';
 import 'story_viewer_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -28,8 +32,7 @@ class HomePage extends StatefulWidget {
       content:
           'Insight: Portofolio yang kuat bukan cuma visual bagus, tapi proses problem solving yang jelas.',
       type: PostType.insight,
-      withImage: true,
-      imageDots: 3,
+      imageCount: 3,
     ),
     PostItem(
       name: 'fajar.engineer',
@@ -37,7 +40,6 @@ class HomePage extends StatefulWidget {
       content:
           'Short: Flutter tip hari ini, pisahkan widget reusable dari awal supaya scaling lebih gampang.',
       type: PostType.short,
-      withImage: false,
       isFollowed: false,
     ),
     PostItem(
@@ -46,8 +48,7 @@ class HomePage extends StatefulWidget {
       content:
           'Loker: Flutter Developer (Remote). Butuh pengalaman state management dan integrasi API.',
       type: PostType.job,
-      withImage: true,
-      imageDots: 4,
+      imageCount: 1,
       canApply: true,
       isFollowed: false,
     ),
@@ -83,15 +84,40 @@ class _HomePageState extends State<HomePage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage()));
   }
 
+  void _openCreateShortPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const CreateShortPage()));
+  }
+
+  void _openNotificationsPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const NotificationsPage()));
+  }
+
+  void _openSearchPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            const TopBar(),
+            TopBar(
+              onNotificationTap: _openNotificationsPage,
+              onSearchTap: _openSearchPage,
+            ),
             const SizedBox(height: 10),
-            Stories(stories: stories, onStoryTap: _openStory),
+            Stories(
+              stories: stories,
+              onStoryTap: _openStory,
+              onMineAddTap: _openCreateShortPage,
+            ),
             const SizedBox(height: 8),
             Expanded(
               child: ListView.separated(
@@ -109,6 +135,9 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: BottomNav(
         currentTab: NavTab.home,
         onCreateTap: _openCreatePage,
+        onApplyTap: () => AppRoutes.goApply(context),
+        onCommunityTap: () => AppRoutes.goCommunity(context),
+        onProfileTap: () => AppRoutes.goProfile(context),
       ),
     );
   }

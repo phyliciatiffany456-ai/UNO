@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/post_item.dart';
+import '../models/story_item.dart';
+import '../pages/job_apply_page.dart';
+import '../pages/story_viewer_page.dart';
+import 'expandable_text.dart';
 import 'pop_icon_button.dart';
 
 class FeedPost extends StatefulWidget {
@@ -14,11 +18,23 @@ class FeedPost extends StatefulWidget {
 
 class _FeedPostState extends State<FeedPost> {
   late bool _isFollowed;
+  late bool _isStoryViewed;
+  late int _likeCount;
+  late int _commentCount;
+  late int _shareCount;
+  bool _liked = false;
+  bool _commented = false;
+  bool _shared = false;
+  int _currentImageIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _isFollowed = widget.post.isFollowed;
+    _isStoryViewed = false;
+    _likeCount = 24;
+    _commentCount = 3;
+    _shareCount = 1;
   }
 
   @override
@@ -34,7 +50,7 @@ class _FeedPostState extends State<FeedPost> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               children: [
-                const CircleAvatar(radius: 10, backgroundColor: Colors.white),
+                _storyAvatar,
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -107,11 +123,31 @@ class _FeedPostState extends State<FeedPost> {
                     ),
                   ),
                 const SizedBox(width: 8),
-                const PopIconButton(
-                  icon: Icons.more_vert,
-                  color: Colors.white,
-                  size: 16,
-                  toggle: false,
+                PopupMenuButton<String>(
+                  color: const Color(0xFF20242B),
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  itemBuilder: (BuildContext context) => const [
+                    PopupMenuItem<String>(
+                      value: 'report',
+                      child: Text(
+                        'Laporkan',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
+                  onSelected: (String value) {
+                    if (value != 'report') return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Postingan dilaporkan'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -119,8 +155,9 @@ class _FeedPostState extends State<FeedPost> {
           const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              post.content,
+            child: ExpandableText(
+              text: post.content,
+              maxLines: 2,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
@@ -128,57 +165,86 @@ class _FeedPostState extends State<FeedPost> {
               ),
             ),
           ),
-          if (post.withImage) ...[
+          if (post.imageCount > 0) ...[
             const SizedBox(height: 8),
-            Container(
+            SizedBox(
               height: 220,
               width: double.infinity,
-              color: const Color(0xFFCFCFCF),
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List<Widget>.generate(
-                    post.imageDots,
-                    (int index) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: _Dot(active: index == 0),
-                    ),
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  PageView.builder(
+                    itemCount: post.imageCount,
+                    onPageChanged: (int index) {
+                      setState(() {
+                        _currentImageIndex = index;
+                      });
+                    },
+                    itemBuilder: (BuildContext context, int index) {
+                      return Container(color: const Color(0xFFCFCFCF));
+                    },
                   ),
-                ),
+                  if (post.imageCount > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List<Widget>.generate(
+                          post.imageCount,
+                          (int index) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: _Dot(active: index == _currentImageIndex),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               children: [
-                PopIconButton(
-                  icon: Icons.favorite_border,
-                  activeIcon: Icons.favorite,
-                  color: Colors.white,
-                  activeColor: Color(0xFFFF3B30),
-                  size: 18,
+                _EngagementButton(
+                  icon: _liked ? Icons.favorite : Icons.favorite_border,
+                  color: _liked ? const Color(0xFFFF3B30) : Colors.white,
+                  count: _likeCount,
+                  onTap: () {
+                    setState(() {
+                      _liked = !_liked;
+                      _likeCount += _liked ? 1 : -1;
+                    });
+                  },
                 ),
-                SizedBox(width: 8),
-                PopIconButton(
-                  icon: Icons.mode_comment_outlined,
-                  activeIcon: Icons.mode_comment,
-                  color: Colors.white,
-                  activeColor: Color(0xFF7DD3FC),
-                  size: 18,
+                const SizedBox(width: 12),
+                _EngagementButton(
+                  icon: _commented
+                      ? Icons.mode_comment
+                      : Icons.mode_comment_outlined,
+                  color: _commented ? const Color(0xFF7DD3FC) : Colors.white,
+                  count: _commentCount,
+                  onTap: () {
+                    setState(() {
+                      _commented = !_commented;
+                      _commentCount += _commented ? 1 : -1;
+                    });
+                  },
                 ),
-                SizedBox(width: 8),
-                PopIconButton(
-                  icon: Icons.send_outlined,
-                  activeIcon: Icons.send,
-                  color: Colors.white,
-                  activeColor: Color(0xFF93C5FD),
-                  size: 18,
+                const SizedBox(width: 12),
+                _EngagementButton(
+                  icon: _shared ? Icons.send : Icons.send_outlined,
+                  color: _shared ? const Color(0xFF93C5FD) : Colors.white,
+                  count: _shareCount,
+                  onTap: () {
+                    setState(() {
+                      _shared = !_shared;
+                      _shareCount += _shared ? 1 : -1;
+                    });
+                  },
                 ),
-                Spacer(),
-                PopIconButton(
+                const Spacer(),
+                const PopIconButton(
                   icon: Icons.bookmark_border,
                   activeIcon: Icons.bookmark,
                   color: Colors.white,
@@ -212,22 +278,32 @@ class _FeedPostState extends State<FeedPost> {
                   ),
                 ),
                 if (post.canApply)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF2B2B),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'Apply',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic,
-                        fontWeight: FontWeight.w800,
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => JobApplyPage(company: post.name),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF2B2B),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'Apply',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
@@ -260,6 +336,101 @@ class _FeedPostState extends State<FeedPost> {
       case PostType.job:
         return const Color(0xFFFF2B2B);
     }
+  }
+
+  Widget get _storyAvatar {
+    final PostItem post = widget.post;
+    final bool withStoryRing = post.hasStory;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: withStoryRing
+          ? () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => StoryViewerPage(
+                    story: StoryItem(label: post.name, isViewed: false),
+                  ),
+                ),
+              );
+              if (!mounted) return;
+              setState(() {
+                _isStoryViewed = true;
+              });
+            }
+          : null,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: withStoryRing
+              ? (_isStoryViewed
+                    ? const LinearGradient(
+                        colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
+                      )
+                    : const LinearGradient(
+                        colors: [
+                          Color(0xFFFEDA75),
+                          Color(0xFFFA7E1E),
+                          Color(0xFFD62976),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ))
+              : null,
+          color: withStoryRing ? null : Colors.white,
+        ),
+        child: Center(
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF0F1013),
+            ),
+            child: const Center(
+              child: CircleAvatar(radius: 8, backgroundColor: Colors.white),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EngagementButton extends StatelessWidget {
+  const _EngagementButton({
+    required this.icon,
+    required this.color,
+    required this.count,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 3),
+          Text(
+            '$count',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

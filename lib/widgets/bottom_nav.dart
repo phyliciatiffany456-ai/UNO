@@ -9,12 +9,18 @@ class BottomNav extends StatelessWidget {
     super.key,
     required this.currentTab,
     this.onHomeTap,
+    this.onApplyTap,
     this.onCreateTap,
+    this.onCommunityTap,
+    this.onProfileTap,
   });
 
   final NavTab currentTab;
   final VoidCallback? onHomeTap;
+  final VoidCallback? onApplyTap;
   final VoidCallback? onCreateTap;
+  final VoidCallback? onCommunityTap;
+  final VoidCallback? onProfileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -37,17 +43,20 @@ class BottomNav extends StatelessWidget {
             Icons.work_outline,
             label: 'Apply',
             active: currentTab == NavTab.apply,
+            onTap: onApplyTap,
           ),
           CreateNavButton(onTap: onCreateTap ?? () {}),
           _navIcon(
             Icons.groups_outlined,
             label: 'Community',
             active: currentTab == NavTab.community,
+            onTap: onCommunityTap,
           ),
           _navIcon(
             Icons.person_outline,
             label: 'Profile',
             active: currentTab == NavTab.profile,
+            onTap: onProfileTap,
           ),
         ],
       ),
@@ -79,7 +88,7 @@ class BottomNav extends StatelessWidget {
             child: PopIconButton(
               icon: icon,
               color: Colors.white,
-              size: 14,
+              size: 16,
               toggle: false,
               onTap: (_) => onTap?.call(),
             ),
@@ -87,7 +96,7 @@ class BottomNav extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(color: Colors.white70, fontSize: 8),
+            style: const TextStyle(color: Colors.white70, fontSize: 9),
           ),
         ],
       ),

@@ -3,10 +3,16 @@ import 'package:flutter/material.dart';
 import '../models/story_item.dart';
 
 class Stories extends StatelessWidget {
-  const Stories({super.key, required this.stories, required this.onStoryTap});
+  const Stories({
+    super.key,
+    required this.stories,
+    required this.onStoryTap,
+    this.onMineAddTap,
+  });
 
   final List<StoryItem> stories;
   final ValueChanged<int> onStoryTap;
+  final VoidCallback? onMineAddTap;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +29,7 @@ class Stories extends StatelessWidget {
             isMine: item.isMine,
             isViewed: item.isViewed,
             onTap: () => onStoryTap(index),
+            onAddTap: item.isMine ? onMineAddTap : null,
           );
         }).toList(),
       ),
@@ -37,12 +44,14 @@ class StoryBubble extends StatelessWidget {
     required this.onTap,
     this.isMine = false,
     this.isViewed = false,
+    this.onAddTap,
   });
 
   final String label;
   final VoidCallback onTap;
   final bool isMine;
   final bool isViewed;
+  final VoidCallback? onAddTap;
 
   @override
   Widget build(BuildContext context) {
@@ -108,21 +117,28 @@ class StoryBubble extends StatelessWidget {
                     Positioned(
                       right: -1,
                       bottom: -1,
-                      child: Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2D9BFF),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0xFF0F1013),
-                            width: 1.8,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: onAddTap,
+                          child: Container(
+                            width: 18,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2D9BFF),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF0F1013),
+                                width: 1.8,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              size: 12,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          size: 12,
-                          color: Colors.white,
                         ),
                       ),
                     ),

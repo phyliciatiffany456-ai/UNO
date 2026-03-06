@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../widgets/bottom_nav.dart';
 import '../widgets/pop_icon_button.dart';
+import 'apply_page.dart';
+import 'community_page.dart';
+import 'notifications_page.dart';
+import 'profile_page.dart';
+import 'search_page.dart';
 
 class CreatePostPage extends StatefulWidget {
   const CreatePostPage({super.key});
@@ -18,6 +23,18 @@ class _CreatePostPageState extends State<CreatePostPage> {
     Navigator.of(context).popUntil((Route<dynamic> route) => route.isFirst);
   }
 
+  void _openNotifications() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const NotificationsPage()));
+  }
+
+  void _openSearch() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -25,7 +42,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 14),
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(14, 8, 12, 8),
               child: Row(
                 children: [
@@ -34,6 +51,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     color: Colors.white,
                     size: 20,
                     toggle: false,
+                    onTap: (_) => _openNotifications(),
                   ),
                   Spacer(),
                   Text(
@@ -51,6 +69,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     color: Colors.white,
                     size: 22,
                     toggle: false,
+                    onTap: (_) => _openSearch(),
                   ),
                 ],
               ),
@@ -154,6 +173,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
       bottomNavigationBar: BottomNav(
         currentTab: NavTab.create,
         onHomeTap: _goHome,
+        onApplyTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const ApplyPage())),
+        onCommunityTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const CommunityPage())),
+        onProfileTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const ProfilePage())),
       ),
     );
   }
