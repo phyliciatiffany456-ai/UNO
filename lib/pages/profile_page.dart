@@ -1,17 +1,40 @@
 import 'package:flutter/material.dart';
 
 import '../navigation/app_routes.dart';
+import '../models/story_item.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/expandable_text.dart';
-import '../widgets/story_ring_avatar.dart';
+import '../widgets/top_bar.dart';
 import 'community_page.dart';
 import 'create_post_page.dart';
+import 'notifications_page.dart';
 import 'post_zoom_page.dart';
 import 'profile_dashboard_page.dart';
 import 'profile_edit_page.dart';
+import 'search_page.dart';
+import 'story_viewer_page.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  bool _viewedProfileStory = false;
+
+  void _openNotifications(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const NotificationsPage()));
+  }
+
+  void _openSearch(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,14 +45,24 @@ class ProfilePage extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
+            TopBar(
+              onNotificationTap: () => _openNotifications(context),
+              onSearchTap: () => _openSearch(context),
+            ),
+            const SizedBox(height: 8),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
                 children: [
-                  const Row(
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _ProfileRingAvatar(),
+                      _ProfileRingAvatar(
+                        label: 'TiffanyPhylicia',
+                        viewed: _viewedProfileStory,
+                        onTap: () =>
+                            _openStory(context, 'TiffanyPhylicia'),
+                      ),
                       SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -178,6 +211,18 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
+  Future<void> _openStory(BuildContext context, String label) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _viewedProfileStory = true;
+    });
+  }
+
   Widget _profileAction(String label, {required VoidCallback onTap}) {
     return Expanded(
       child: InkWell(
@@ -206,10 +251,86 @@ class ProfilePage extends StatelessWidget {
 }
 
 class _ProfileRingAvatar extends StatelessWidget {
-  const _ProfileRingAvatar();
+  const _ProfileRingAvatar({
+    required this.label,
+    this.size = 84,
+    required this.viewed,
+    this.onTap,
+  });
+
+  final String label;
+  final double size;
+  final bool viewed;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => const StoryRingAvatar(size: 84);
+  Widget build(BuildContext context) {
+    final Gradient ringGradient = viewed
+        ? const LinearGradient(
+            colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
+          )
+        : const LinearGradient(
+            colors: [Color(0xFFFEDA75), Color(0xFFFA7E1E), Color(0xFFD62976)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          );
+
+    final double innerDark = size - 8;
+    final double innerLight = size - 16;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(size),
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: ringGradient,
+        ),
+        child: Center(
+          child: Container(
+            width: innerDark,
+            height: innerDark,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF0F1013),
+            ),
+            child: Center(
+              child: Container(
+                width: innerLight,
+                height: innerLight,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFE5E7EB),
+                ),
+                child: Center(
+                  child: Text(
+                    _initials(label),
+                    style: const TextStyle(
+                      color: Color(0xFF121417),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _initials(String raw) {
+    final List<String> words = raw
+        .split(' ')
+        .where((String word) => word.trim().isNotEmpty)
+        .toList();
+    if (words.isEmpty) return 'U';
+    if (words.length == 1) return words.first.substring(0, 1).toUpperCase();
+    return '${words[0][0]}${words[1][0]}'.toUpperCase();
+  }
 }
 
 class _ProfileStat extends StatelessWidget {

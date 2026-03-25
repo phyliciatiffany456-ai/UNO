@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../navigation/app_routes.dart';
 import '../models/story_item.dart';
 import '../widgets/bottom_nav.dart';
-import '../widgets/story_ring_avatar.dart';
 import '../widgets/stories.dart';
 import '../widgets/top_bar.dart';
 import 'chat_box_page.dart';
@@ -28,6 +27,8 @@ class _CommunityPageState extends State<CommunityPage> {
     StoryItem(label: 'pli'),
   ];
 
+  final Set<String> _viewedInlineProfiles = <String>{};
+
   bool _friendMode = true;
 
   void _openNotifications() {
@@ -47,6 +48,18 @@ class _CommunityPageState extends State<CommunityPage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: story)),
     );
+  }
+
+  Future<void> _openInlineStory(String label) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _viewedInlineProfiles.add(label);
+    });
   }
 
   @override
@@ -91,34 +104,46 @@ class _CommunityPageState extends State<CommunityPage> {
                 ],
               ),
             ),
-            InkWell(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const ChatBoxPage()),
-              ),
-              child: const Padding(
-                padding: EdgeInsets.fromLTRB(12, 0, 12, 0),
-                child: Row(
-                  children: [
-                    StoryRingAvatar(size: 28),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'TiffanyPhylicia',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          fontStyle: FontStyle.italic,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+              child: Row(
+                children: [
+                  _InlineStoryAvatar(
+                    label: 'TiffanyPhylicia',
+                    viewed: _viewedInlineProfiles.contains('TiffanyPhylicia'),
+                    onTap: () => _openInlineStory('TiffanyPhylicia'),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ChatBoxPage(),
                         ),
                       ),
+                      child: const Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'TiffanyPhylicia',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.local_fire_department,
+                            color: Color(0xFFFFA84D),
+                            size: 18,
+                          ),
+                        ],
+                      ),
                     ),
-                    Icon(
-                      Icons.local_fire_department,
-                      color: Color(0xFFFFA84D),
-                      size: 18,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             const Spacer(),
@@ -165,5 +190,83 @@ class _CommunityPageState extends State<CommunityPage> {
         ),
       ),
     );
+  }
+}
+
+class _InlineStoryAvatar extends StatelessWidget {
+  const _InlineStoryAvatar({
+    required this.label,
+    required this.viewed,
+    this.onTap,
+  });
+
+  final String label;
+  final bool viewed;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final Gradient ringGradient = viewed
+        ? const LinearGradient(
+            colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
+          )
+        : const LinearGradient(
+            colors: [Color(0xFFFEDA75), Color(0xFFFA7E1E), Color(0xFFD62976)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          );
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: ringGradient,
+        ),
+        child: Center(
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF0F1013),
+            ),
+            child: Center(
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFFE5E7EB),
+                ),
+                child: Center(
+                  child: Text(
+                    _initials(label),
+                    style: const TextStyle(
+                      color: Color(0xFF121417),
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _initials(String raw) {
+    final List<String> words = raw
+        .split(' ')
+        .where((String word) => word.trim().isNotEmpty)
+        .toList();
+    if (words.isEmpty) return 'U';
+    if (words.length == 1) return words.first.substring(0, 1).toUpperCase();
+    return '${words[0][0]}${words[1][0]}'.toUpperCase();
   }
 }
