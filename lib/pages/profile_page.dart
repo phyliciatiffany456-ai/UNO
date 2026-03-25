@@ -60,8 +60,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       _ProfileRingAvatar(
                         label: 'TiffanyPhylicia',
                         viewed: _viewedProfileStory,
-                        onTap: () =>
-                            _openStory(context, 'TiffanyPhylicia'),
+                        onTap: () => _openStory(context, 'TiffanyPhylicia'),
                       ),
                       SizedBox(width: 10),
                       Expanded(
@@ -266,9 +265,7 @@ class _ProfileRingAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Gradient ringGradient = viewed
-        ? const LinearGradient(
-            colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
-          )
+        ? const LinearGradient(colors: [Color(0xFF6B7280), Color(0xFF6B7280)])
         : const LinearGradient(
             colors: [Color(0xFFFEDA75), Color(0xFFFA7E1E), Color(0xFFD62976)],
             begin: Alignment.topLeft,
