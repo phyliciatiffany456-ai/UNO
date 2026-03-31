@@ -190,13 +190,7 @@ class _FeedPostState extends State<FeedPost> {
                       padding: const EdgeInsets.only(bottom: 14),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: List<Widget>.generate(
-                          post.imageCount,
-                          (int index) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 3),
-                            child: _Dot(active: index == _currentImageIndex),
-                          ),
-                        ),
+                        children: _buildDots(post.imageCount),
                       ),
                     ),
                 ],
@@ -257,44 +251,48 @@ class _FeedPostState extends State<FeedPost> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  post.name,
+                Row(
+                  children: [
+                    Text(
+                      post.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (post.canApply)
+                      SizedBox(
+                        width: 78,
+                        child: AppButton(
+                          label: 'Apply',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => JobApplyPage(company: post.name),
+                              ),
+                            );
+                          },
+                          height: 28,
+                          fontSize: 11,
+                          borderRadius: 12,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                ExpandableText(
+                  text: post.content,
+                  maxLines: 1,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF9CA3AF),
+                    fontSize: 9,
                   ),
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    post.content,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF9CA3AF),
-                      fontSize: 9,
-                    ),
-                  ),
-                ),
-                if (post.canApply)
-                  SizedBox(
-                    width: 78,
-                    child: AppButton(
-                      label: 'Apply',
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => JobApplyPage(company: post.name),
-                          ),
-                        );
-                      },
-                      height: 28,
-                      fontSize: 11,
-                      borderRadius: 12,
-                    ),
-                  ),
               ],
             ),
           ),
@@ -324,6 +322,35 @@ class _FeedPostState extends State<FeedPost> {
       case PostType.job:
         return const Color(0xFFFF2B2B);
     }
+  }
+
+  List<Widget> _buildDots(int totalImages) {
+    final int visibleCount = totalImages <= 5 ? totalImages : 5;
+
+    int windowStart = 0;
+    int activeDotIndex = _currentImageIndex;
+
+    if (totalImages > 5) {
+      if (_currentImageIndex <= 3) {
+        windowStart = 0;
+        activeDotIndex = _currentImageIndex;
+      } else if (_currentImageIndex >= totalImages - 1) {
+        windowStart = totalImages - 5;
+        activeDotIndex = 4;
+      } else {
+        // Keep active indicator at the 4th dot while sliding in middle pages.
+        windowStart = _currentImageIndex - 3;
+        activeDotIndex = 3;
+      }
+    }
+
+    return List<Widget>.generate(visibleCount, (int i) {
+      final int imageIndex = windowStart + i;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: _Dot(active: imageIndex == _currentImageIndex || i == activeDotIndex),
+      );
+    });
   }
 
   Widget get _storyAvatar {
@@ -377,7 +404,11 @@ class _FeedPostState extends State<FeedPost> {
               color: Color(0xFF0F1013),
             ),
             child: const Center(
-              child: CircleAvatar(radius: 8, backgroundColor: Colors.white),
+              child: CircleAvatar(
+                radius: 8,
+                backgroundColor: Colors.white,
+                child: Icon(Icons.person, size: 10, color: Color(0xFF121417)),
+              ),
             ),
           ),
         ),

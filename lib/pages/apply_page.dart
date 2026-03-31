@@ -83,13 +83,11 @@ class _ApplyPageState extends State<ApplyPage> {
                     isProfileViewed: _viewedProfiles.contains(
                       'TiffanyPhylicia',
                     ),
-                    onProfileTap: () =>
-                        _openStory(context, 'TiffanyPhylicia'),
+                    onProfileTap: () => _openStory(context, 'TiffanyPhylicia'),
                     onApplyTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => const JobApplyPage(
-                          company: 'TiffanyPhylicia',
-                        ),
+                        builder: (_) =>
+                            const JobApplyPage(company: 'TiffanyPhylicia'),
                       ),
                     ),
                   ),
@@ -200,10 +198,7 @@ class _JobCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
                     city,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 ),
               ],
@@ -267,11 +262,7 @@ class _SkillChip extends StatelessWidget {
 }
 
 class _StoryProfile extends StatelessWidget {
-  const _StoryProfile({
-    required this.label,
-    required this.viewed,
-    this.onTap,
-  });
+  const _StoryProfile({required this.label, required this.viewed, this.onTap});
 
   final String label;
   final bool viewed;
@@ -280,9 +271,7 @@ class _StoryProfile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Gradient ringGradient = viewed
-        ? const LinearGradient(
-            colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
-          )
+        ? const LinearGradient(colors: [Color(0xFF6B7280), Color(0xFF6B7280)])
         : const LinearGradient(
             colors: [Color(0xFFFEDA75), Color(0xFFFA7E1E), Color(0xFFD62976)],
             begin: Alignment.topLeft,
