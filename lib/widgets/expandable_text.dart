@@ -6,8 +6,8 @@ class ExpandableText extends StatefulWidget {
     required this.text,
     required this.style,
     this.maxLines = 2,
-    this.expandLabel = 'selengkapnya',
-    this.collapseLabel = 'ringkas',
+    this.expandLabel = 'lihat selengkapnya',
+    this.collapseLabel = 'lihat lebih sedikit',
     this.toggleStyle,
   });
 

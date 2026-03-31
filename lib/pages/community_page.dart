@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../navigation/app_routes.dart';
 import '../models/story_item.dart';
+import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/stories.dart';
 import '../widgets/top_bar.dart';
 import 'chat_box_page.dart';
 import 'create_post_page.dart';
+import 'create_short_page.dart';
 import 'notifications_page.dart';
 import 'search_page.dart';
 import 'story_viewer_page.dart';
@@ -19,7 +21,7 @@ class CommunityPage extends StatefulWidget {
 }
 
 class _CommunityPageState extends State<CommunityPage> {
-  final List<StoryItem> _stories = const <StoryItem>[
+  final List<StoryItem> _stories = <StoryItem>[
     StoryItem(label: 'Your Story', isMine: true),
     StoryItem(label: 'phylicia.tif'),
     StoryItem(label: 'tiffany456'),
@@ -43,11 +45,21 @@ class _CommunityPageState extends State<CommunityPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
   }
 
+  void _openCreateShort() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const CreateShortPage()));
+  }
+
   Future<void> _openStory(int index) async {
     final StoryItem story = _stories[index];
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: story)),
     );
+    if (!mounted || story.isViewed) return;
+    setState(() {
+      _stories[index] = story.copyWith(isViewed: true);
+    });
   }
 
   Future<void> _openInlineStory(String label) async {
@@ -73,7 +85,11 @@ class _CommunityPageState extends State<CommunityPage> {
               onSearchTap: _openSearch,
             ),
             const SizedBox(height: 8),
-            Stories(stories: _stories, onStoryTap: _openStory),
+            Stories(
+              stories: _stories,
+              onStoryTap: _openStory,
+              onMineAddTap: _openCreateShort,
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
               child: Row(
@@ -168,27 +184,13 @@ class _CommunityPageState extends State<CommunityPage> {
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
+    return AppButton(
+      label: label,
       onTap: onTap,
-      child: Container(
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? const Color(0x1AFFFFFF) : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFFF6A2D)),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      ),
+      variant: selected ? AppButtonVariant.primary : AppButtonVariant.outline,
+      height: 34,
+      fontSize: 12,
+      borderRadius: 10,
     );
   }
 }

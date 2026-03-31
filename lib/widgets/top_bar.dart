@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/notification_store.dart';
 import 'pop_icon_button.dart';
 
 class TopBar extends StatelessWidget {
@@ -12,36 +13,61 @@ class TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 12, 0),
-      child: Row(
-        children: [
-          _AnimatedNotificationButton(onTap: onNotificationTap),
-          const SizedBox(width: 10),
-          const Text(
-            'uno',
-            style: TextStyle(
-              color: Color(0xFFFF6A2D),
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              fontStyle: FontStyle.italic,
+      child: SizedBox(
+        height: 30,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Center(
+              child: Text(
+                'uno',
+                style: TextStyle(
+                  color: Color(0xFFFF6A2D),
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ),
-          ),
-          const Spacer(),
-          PopIconButton(
-            icon: Icons.search,
-            color: Colors.white,
-            size: 20,
-            toggle: false,
-            onTap: (_) => onSearchTap?.call(),
-          ),
-        ],
+            Row(
+              children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: NotificationStore.hasUnread,
+                  builder: (
+                    BuildContext context,
+                    bool hasUnread,
+                    Widget? child,
+                  ) {
+                    return _AnimatedNotificationButton(
+                      hasUnread: hasUnread,
+                      onTap: () {
+                        NotificationStore.markRead();
+                        onNotificationTap?.call();
+                      },
+                    );
+                  },
+                ),
+                const Spacer(),
+                PopIconButton(
+                  icon: Icons.search,
+                  color: Colors.white,
+                  size: 20,
+                  toggle: false,
+                  onTap: (_) => onSearchTap?.call(),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _AnimatedNotificationButton extends StatefulWidget {
-  const _AnimatedNotificationButton({this.onTap});
+  const _AnimatedNotificationButton({required this.hasUnread, this.onTap});
 
+  final bool hasUnread;
   final VoidCallback? onTap;
 
   @override
@@ -86,28 +112,29 @@ class _AnimatedNotificationButtonState
               clipBehavior: Clip.none,
               children: [
                 Icon(Icons.notifications_none, color: Colors.white, size: 19),
-                Positioned(
-                  right: -1,
-                  top: 1,
-                  child: Container(
-                    width: 8 + (t * 2),
-                    height: 8 + (t * 2),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(
-                        0xFF3EA5FF,
-                      ).withValues(alpha: 0.75 - (t * 0.35)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFF3EA5FF,
-                          ).withValues(alpha: 0.7 - (t * 0.35)),
-                          blurRadius: 8 + (t * 4),
-                        ),
-                      ],
+                if (widget.hasUnread)
+                  Positioned(
+                    right: -1,
+                    top: 1,
+                    child: Container(
+                      width: 8 + (t * 2),
+                      height: 8 + (t * 2),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(
+                          0xFF3EA5FF,
+                        ).withValues(alpha: 0.75 - (t * 0.35)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF3EA5FF,
+                            ).withValues(alpha: 0.7 - (t * 0.35)),
+                            blurRadius: 8 + (t * 4),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           );

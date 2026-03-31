@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../navigation/app_routes.dart';
 import '../models/story_item.dart';
 import '../widgets/bottom_nav.dart';
-import 'apply_page.dart';
-import 'community_page.dart';
+import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
-import 'home_page.dart';
-import 'profile_page.dart';
+import 'notifications_page.dart';
 import 'story_viewer_page.dart';
 
 class SearchPage extends StatefulWidget {
@@ -31,71 +30,84 @@ class _SearchPageState extends State<SearchPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage()));
   }
 
+  void _openNotifications() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const NotificationsPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 6),
-            InkWell(
-              onTap: () => Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute<void>(builder: (_) => const HomePage()),
-                (Route<dynamic> route) => false,
-              ),
-              child: const Text(
-                'uno',
-                style: TextStyle(
-                  color: Color(0xFFFF6A2D),
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
+            TopBar(
+              onNotificationTap: _openNotifications,
+              onSearchTap: () {},
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: TextField(
-                controller: _controller,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  hintText: 'Cari user, short, atau loker',
-                  hintStyle: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 12,
-                  ),
-                  suffixIcon: const Icon(Icons.search, color: Colors.white),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFFFF6A2D)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFFFF6A2D)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF13151A),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF24262E)),
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _controller,
+                      autofocus: true,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      cursorColor: const Color(0xFFFF6A2D),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        hintText: 'Cari user, short, atau loker',
+                        hintStyle: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                        suffixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFF0E1014),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: Color(0xFF2D313B)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: Color(0xFFFF6A2D)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _SearchTile(
+                      username: 'TiffanyPhylicia',
+                      text: 'UI/UX Designer • Open to collaboration',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const StoryViewerPage(
+                              story: StoryItem(label: 'TiffanyPhylicia'),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            _SearchTile(
-              username: 'TiffanyPhylicia',
-              text: 'Lorem Ipsum dolor sim amet...',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const StoryViewerPage(
-                      story: StoryItem(label: 'TiffanyPhylicia'),
-                    ),
-                  ),
-                );
-              },
             ),
             const Spacer(),
           ],
@@ -103,20 +115,11 @@ class _SearchPageState extends State<SearchPage> {
       ),
       bottomNavigationBar: BottomNav(
         currentTab: NavTab.home,
-        onHomeTap: () => Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute<void>(builder: (_) => const HomePage()),
-          (Route<dynamic> route) => false,
-        ),
-        onApplyTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: (_) => const ApplyPage())),
+        onHomeTap: () => AppRoutes.goHome(context),
+        onApplyTap: () => AppRoutes.goApply(context),
         onCreateTap: () => _openCreate(context),
-        onCommunityTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: (_) => const CommunityPage())),
-        onProfileTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: (_) => const ProfilePage())),
+        onCommunityTap: () => AppRoutes.goCommunity(context),
+        onProfileTap: () => AppRoutes.goProfile(context),
       ),
     );
   }
@@ -136,22 +139,43 @@ class _SearchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      borderRadius: BorderRadius.circular(10),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0E1014),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF2D313B)),
+        ),
         child: Row(
           children: [
-            const CircleAvatar(radius: 13, backgroundColor: Color(0xFFFF1010)),
+            Container(
+              width: 30,
+              height: 30,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFFFF4B4B), Color(0xFFFF2B2B)],
+                ),
+              ),
+              child: const Center(
+                child: CircleAvatar(
+                  radius: 12,
+                  backgroundColor: Color(0xFFE5E7EB),
+                ),
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$username *',
+                    username,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       fontStyle: FontStyle.italic,
                     ),
@@ -161,7 +185,7 @@ class _SearchTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFF9CA3AF),
-                      fontSize: 9,
+                      fontSize: 11,
                     ),
                   ),
                 ],
@@ -171,7 +195,7 @@ class _SearchTile extends StatelessWidget {
             const Icon(
               Icons.local_fire_department,
               color: Color(0xFFFFA84D),
-              size: 16,
+              size: 18,
             ),
           ],
         ),

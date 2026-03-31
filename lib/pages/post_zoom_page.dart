@@ -10,8 +10,15 @@ import 'create_post_page.dart';
 import 'home_page.dart';
 import 'profile_page.dart';
 
-class PostZoomPage extends StatelessWidget {
+class PostZoomPage extends StatefulWidget {
   const PostZoomPage({super.key});
+
+  @override
+  State<PostZoomPage> createState() => _PostZoomPageState();
+}
+
+class _PostZoomPageState extends State<PostZoomPage> {
+  bool _viewedProfileStory = false;
 
   @override
   Widget build(BuildContext context) {
@@ -29,12 +36,19 @@ class PostZoomPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            const Row(
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ZoomAvatar(),
-                SizedBox(width: 8),
-                Expanded(
+                _ZoomAvatar(
+                  viewed: _viewedProfileStory,
+                  onTap: () {
+                    setState(() {
+                      _viewedProfileStory = true;
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -260,10 +274,14 @@ class _TopStat extends StatelessWidget {
 }
 
 class _ZoomAvatar extends StatelessWidget {
-  const _ZoomAvatar();
+  const _ZoomAvatar({required this.viewed, required this.onTap});
+
+  final bool viewed;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => const StoryRingAvatar(size: 72);
+  Widget build(BuildContext context) =>
+      StoryRingAvatar(size: 72, viewed: viewed, onTap: onTap);
 }
 
 class _Dot extends StatelessWidget {

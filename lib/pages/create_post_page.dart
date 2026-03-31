@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
-import '../widgets/pop_icon_button.dart';
+import '../widgets/top_bar.dart';
 import 'apply_page.dart';
 import 'community_page.dart';
 import 'notifications_page.dart';
@@ -18,6 +19,8 @@ class CreatePostPage extends StatefulWidget {
 class _CreatePostPageState extends State<CreatePostPage> {
   bool hideLikeAndViewCount = true;
   bool turnOffCommenting = true;
+  String selectedCategory = 'Insight';
+  String selectedAccessibility = 'Public';
 
   void _goHome() {
     Navigator.of(context).popUntil((Route<dynamic> route) => route.isFirst);
@@ -42,37 +45,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 14),
           children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(14, 8, 12, 8),
-              child: Row(
-                children: [
-                  PopIconButton(
-                    icon: Icons.notifications_none,
-                    color: Colors.white,
-                    size: 20,
-                    toggle: false,
-                    onTap: (_) => _openNotifications(),
-                  ),
-                  Spacer(),
-                  Text(
-                    'uno',
-                    style: TextStyle(
-                      color: Color(0xFFFF6A2D),
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                  Spacer(),
-                  PopIconButton(
-                    icon: Icons.search,
-                    color: Colors.white,
-                    size: 22,
-                    toggle: false,
-                    onTap: (_) => _openSearch(),
-                  ),
-                ],
-              ),
+            TopBar(
+              onNotificationTap: _openNotifications,
+              onSearchTap: _openSearch,
             ),
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -88,12 +63,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     ),
                   ),
                   Spacer(),
-                  PopIconButton(
-                    icon: Icons.add,
-                    color: Colors.white,
-                    size: 34,
-                    toggle: false,
-                  ),
+                  Icon(Icons.add, color: Colors.white, size: 30),
                 ],
               ),
             ),
@@ -102,13 +72,40 @@ class _CreatePostPageState extends State<CreatePostPage> {
               width: double.infinity,
               color: const Color(0xFFC8C8C8),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(14, 10, 14, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
               child: Row(
                 children: [
-                  Expanded(child: _CreateField(label: 'Kategori')),
-                  SizedBox(width: 10),
-                  Expanded(child: _CreateField(label: 'Accessibility')),
+                  Expanded(
+                    child: _CreateDropdownField(
+                      label: 'Kategori',
+                      value: selectedCategory,
+                      options: const <String>[
+                        'Insight',
+                        'Short',
+                        'Loker',
+                        'Portofolio',
+                      ],
+                      onChanged: (String value) {
+                        setState(() {
+                          selectedCategory = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _CreateDropdownField(
+                      label: 'Accessibility',
+                      value: selectedAccessibility,
+                      options: const <String>['Public', 'Private'],
+                      onChanged: (String value) {
+                        setState(() {
+                          selectedAccessibility = value;
+                        });
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -146,23 +143,13 @@ class _CreatePostPageState extends State<CreatePostPage> {
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: Align(
                 alignment: Alignment.centerRight,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF130D),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'POST',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontStyle: FontStyle.italic,
-                      fontWeight: FontWeight.w800,
-                    ),
+                child: SizedBox(
+                  width: 110,
+                  child: AppButton(
+                    label: 'POST',
+                    onTap: () {},
+                    height: 40,
+                    fontSize: 14,
                   ),
                 ),
               ),
@@ -187,29 +174,47 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 }
 
-class _CreateField extends StatelessWidget {
-  const _CreateField({required this.label});
+class _CreateDropdownField extends StatelessWidget {
+  const _CreateDropdownField({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
 
   final String label;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 34,
+      height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFF3D00)),
       ),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-          const Spacer(),
-          const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
-        ],
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+          dropdownColor: const Color(0xFF1A1C22),
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+          isExpanded: true,
+          items: options
+              .map(
+                (String item) => DropdownMenuItem<String>(
+                  value: item,
+                  child: Text('$label: $item'),
+                ),
+              )
+              .toList(),
+          onChanged: (String? newValue) {
+            if (newValue != null) onChanged(newValue);
+          },
+        ),
       ),
     );
   }

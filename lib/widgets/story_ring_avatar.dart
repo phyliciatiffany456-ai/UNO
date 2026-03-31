@@ -30,7 +30,7 @@ class StoryRingAvatar extends StatelessWidget {
                   colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
                 )
               : const LinearGradient(
-                  colors: [Color(0xFFFF3E3E), Color(0xFFFF2B2B)],
+                  colors: [Color(0xFFFEDA75), Color(0xFFFA7E1E), Color(0xFFD62976)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),

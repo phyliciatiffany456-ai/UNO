@@ -4,6 +4,7 @@ import '../models/post_item.dart';
 import '../models/story_item.dart';
 import '../pages/job_apply_page.dart';
 import '../pages/story_viewer_page.dart';
+import 'app_button.dart';
 import 'expandable_text.dart';
 import 'pop_icon_button.dart';
 
@@ -278,33 +279,20 @@ class _FeedPostState extends State<FeedPost> {
                   ),
                 ),
                 if (post.canApply)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => JobApplyPage(company: post.name),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF2B2B),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Apply',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontStyle: FontStyle.italic,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                  SizedBox(
+                    width: 78,
+                    child: AppButton(
+                      label: 'Apply',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => JobApplyPage(company: post.name),
+                          ),
+                        );
+                      },
+                      height: 28,
+                      fontSize: 11,
+                      borderRadius: 12,
                     ),
                   ),
               ],

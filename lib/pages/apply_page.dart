@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../navigation/app_routes.dart';
 import '../models/story_item.dart';
+import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
+import 'job_apply_page.dart';
 import 'notifications_page.dart';
 import 'search_page.dart';
 import 'story_viewer_page.dart';
@@ -54,6 +56,20 @@ class _ApplyPageState extends State<ApplyPage> {
               onSearchTap: () => _openSearch(context),
             ),
             const SizedBox(height: 8),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Rekomendasi Loker',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
@@ -69,6 +85,13 @@ class _ApplyPageState extends State<ApplyPage> {
                     ),
                     onProfileTap: () =>
                         _openStory(context, 'TiffanyPhylicia'),
+                    onApplyTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const JobApplyPage(
+                          company: 'TiffanyPhylicia',
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _JobCard(
@@ -79,6 +102,11 @@ class _ApplyPageState extends State<ApplyPage> {
                     chips: ['Fulltime', 'SMA/SMK', 'Communication Skill'],
                     isProfileViewed: _viewedProfiles.contains('Rani HRD'),
                     onProfileTap: () => _openStory(context, 'Rani HRD'),
+                    onApplyTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const JobApplyPage(company: 'Rani HRD'),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -109,6 +137,7 @@ class _JobCard extends StatelessWidget {
     required this.chips,
     required this.isProfileViewed,
     this.onProfileTap,
+    this.onApplyTap,
   });
 
   final String title;
@@ -118,14 +147,20 @@ class _JobCard extends StatelessWidget {
   final List<String> chips;
   final bool isProfileViewed;
   final VoidCallback? onProfileTap;
+  final VoidCallback? onApplyTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () {},
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+      borderRadius: BorderRadius.circular(12),
+      onTap: onApplyTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF13151A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF24262E)),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -135,7 +170,7 @@ class _JobCard extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
                     fontStyle: FontStyle.italic,
                   ),
@@ -145,9 +180,8 @@ class _JobCard extends StatelessWidget {
                   salary,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    fontStyle: FontStyle.italic,
                   ),
                 ),
               ],
@@ -167,10 +201,8 @@ class _JobCard extends StatelessWidget {
                   child: Text(
                     city,
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      fontStyle: FontStyle.italic,
+                      color: Colors.white70,
+                      fontSize: 11,
                     ),
                   ),
                 ),
@@ -187,27 +219,15 @@ class _JobCard extends StatelessWidget {
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(10),
-                onTap: () {},
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF1414),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Apply',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
+              child: SizedBox(
+                width: 90,
+                child: AppButton(
+                  label: 'Apply',
+                  onTap: onApplyTap,
+                  height: 34,
+                  fontSize: 12,
+                  borderRadius: 10,
+                  expand: true,
                 ),
               ),
             ),
@@ -226,20 +246,20 @@ class _SkillChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 100),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      constraints: const BoxConstraints(minWidth: 82),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFFF6A2D)),
+        color: const Color(0xFF0E1014),
+        border: Border.all(color: const Color(0xFF2D313B)),
       ),
       child: Text(
         label,
         textAlign: TextAlign.center,
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: FontWeight.w700,
-          fontStyle: FontStyle.italic,
         ),
       ),
     );
