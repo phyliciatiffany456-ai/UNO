@@ -7,10 +7,11 @@ import '../navigation/app_routes.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/expandable_text.dart';
-import '../widgets/story_ring_avatar.dart';
+import '../widgets/profile_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
 import 'notifications_page.dart';
+import 'profile_connections_page.dart';
 import 'search_page.dart';
 import 'story_viewer_page.dart';
 
@@ -162,6 +163,14 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     );
   }
 
+  void _openConnections(ConnectionTab tab) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileConnectionsPage(initialTab: tab),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -178,6 +187,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _EditAvatar(
+                  label: _nameController.text.isEmpty
+                      ? 'User'
+                      : _nameController.text,
                   viewed: _viewedProfileStory,
                   onTap: _openProfileStory,
                 ),
@@ -198,12 +210,22 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Row(
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _MiniStat(label: 'Postingan', value: '68'),
-                          _MiniStat(label: 'Pengikuti', value: '9.8K'),
-                          _MiniStat(label: 'Mengikuti', value: '201'),
+                          const _MiniStat(label: 'Postingan', value: '68'),
+                          _MiniStat(
+                            label: 'Pengikut',
+                            value: '9.8K',
+                            onTap: () =>
+                                _openConnections(ConnectionTab.followers),
+                          ),
+                          _MiniStat(
+                            label: 'Mengikuti',
+                            value: '201',
+                            onTap: () =>
+                                _openConnections(ConnectionTab.following),
+                          ),
                         ],
                       ),
                     ],
@@ -519,44 +541,57 @@ class _CvPickerTile extends StatelessWidget {
 }
 
 class _EditAvatar extends StatelessWidget {
-  const _EditAvatar({required this.viewed, required this.onTap});
+  const _EditAvatar({
+    required this.label,
+    required this.viewed,
+    required this.onTap,
+  });
 
+  final String label;
   final bool viewed;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) =>
-      StoryRingAvatar(size: 84, viewed: viewed, onTap: onTap);
+      ProfileRingAvatar(label: label, size: 84, viewed: viewed, onTap: onTap);
 }
 
 class _MiniStat extends StatelessWidget {
-  const _MiniStat({required this.label, required this.value});
+  const _MiniStat({required this.label, required this.value, this.onTap});
 
   final String label;
   final String value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
