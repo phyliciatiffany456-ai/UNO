@@ -4,8 +4,11 @@ import '../models/notification_store.dart';
 import '../navigation/app_routes.dart';
 import '../models/story_item.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/story_ring_avatar.dart';
 import '../widgets/top_bar.dart';
+import 'chat_profile_info_page.dart';
 import 'create_post_page.dart';
+import 'post_zoom_page.dart';
 import 'search_page.dart';
 import 'story_viewer_page.dart';
 
@@ -73,12 +76,32 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       username: 'TiffanyPhylicia',
                       text: 'Memberi reaksi ke postinganmu',
                       streakDays: 4,
-                      onTap: () {
+                      viewedStory: false,
+                      onAvatarTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => const StoryViewerPage(
                               story: StoryItem(label: 'TiffanyPhylicia'),
                             ),
+                          ),
+                        );
+                      },
+                      onNameTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ChatProfileInfoPage(
+                              name: 'TiffanyPhylicia',
+                              role: 'UI/UX Designer',
+                              bio:
+                                  'Suka bangun produk digital dan kolaborasi bareng tim lintas divisi.',
+                            ),
+                          ),
+                        );
+                      },
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const PostZoomPage(),
                           ),
                         );
                       },
@@ -88,7 +111,38 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       username: 'NexaTech Careers',
                       text: 'Membuka lowongan baru untuk Flutter Engineer',
                       streakDays: 2,
-                      onTap: () {},
+                      viewedStory: true,
+                      onAvatarTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const StoryViewerPage(
+                              story: StoryItem(
+                                label: 'NexaTech Careers',
+                                isViewed: true,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      onNameTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ChatProfileInfoPage(
+                              name: 'NexaTech Careers',
+                              role: 'Company',
+                              bio:
+                                  'Akun resmi rekrutmen NexaTech untuk update lowongan terbaru.',
+                            ),
+                          ),
+                        );
+                      },
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const PostZoomPage(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -115,12 +169,18 @@ class _NotificationTile extends StatelessWidget {
     required this.username,
     required this.text,
     required this.streakDays,
+    required this.viewedStory,
+    required this.onAvatarTap,
+    required this.onNameTap,
     required this.onTap,
   });
 
   final String username;
   final String text;
   final int streakDays;
+  final bool viewedStory;
+  final VoidCallback onAvatarTap;
+  final VoidCallback onNameTap;
   final VoidCallback onTap;
 
   @override
@@ -137,34 +197,40 @@ class _NotificationTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFFFF4B4B), Color(0xFFFF2B2B)],
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                StoryRingAvatar(
+                  size: 34,
+                  viewed: viewedStory,
+                  onTap: onAvatarTap,
                 ),
-              ),
-              child: const Center(
-                child: CircleAvatar(
-                  radius: 12,
+                const CircleAvatar(
+                  radius: 11,
                   backgroundColor: Color(0xFFE5E7EB),
+                  child: Icon(Icons.person, size: 13, color: Color(0xFF121417)),
                 ),
-              ),
+              ],
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    username,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      fontStyle: FontStyle.italic,
+                  InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: onNameTap,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        username,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ),
                   ),
                   Text(
