@@ -19,13 +19,11 @@ class TopBar extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             const Center(
-              child: Text(
-                'uno',
-                style: TextStyle(
-                  color: Color(0xFFFF6A2D),
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  fontStyle: FontStyle.italic,
+              child: SizedBox(
+                height: 26,
+                child: Image(
+                  image: AssetImage('lib/gambar/O.png'),
+                  fit: BoxFit.contain,
                 ),
               ),
             ),

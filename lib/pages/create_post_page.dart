@@ -144,12 +144,12 @@ class _CreatePostPageState extends State<CreatePostPage> {
               child: Align(
                 alignment: Alignment.centerRight,
                 child: SizedBox(
-                  width: 110,
+                  width: 90,
                   child: AppButton(
                     label: 'POST',
                     onTap: () {},
-                    height: 40,
-                    fontSize: 14,
+                    height: 34,
+                    fontSize: 12,
                   ),
                 ),
               ),

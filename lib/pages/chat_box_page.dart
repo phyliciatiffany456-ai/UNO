@@ -270,16 +270,6 @@ class _ChatProfileAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        StoryRingAvatar(size: 34, viewed: viewed, onTap: onTap),
-        const CircleAvatar(
-          radius: 11,
-          backgroundColor: Color(0xFFE5E7EB),
-          child: Icon(Icons.person, size: 13, color: Color(0xFF121417)),
-        ),
-      ],
-    );
+    return StoryRingProfileAvatar(size: 34, viewed: viewed, onTap: onTap);
   }
 }

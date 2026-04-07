@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/post_item.dart';
+import '../pages/chat_profile_info_page.dart';
 import '../models/story_item.dart';
 import '../pages/job_apply_page.dart';
 import '../pages/story_viewer_page.dart';
@@ -27,6 +28,31 @@ class _FeedPostState extends State<FeedPost> {
   bool _commented = false;
   bool _shared = false;
   int _currentImageIndex = 0;
+
+  void _openOwnerProfile(PostItem post) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatProfileInfoPage(
+          name: post.name,
+          role: post.role,
+          bio: _ownerBio(post),
+        ),
+      ),
+    );
+  }
+
+  String _ownerBio(PostItem post) {
+    switch (post.name) {
+      case 'TiffanyPhylicia':
+        return 'Suka bangun produk digital dan kolaborasi bareng tim lintas divisi.';
+      case 'fajar.engineer':
+        return 'Mobile engineer yang fokus di arsitektur Flutter, clean code, dan performance.';
+      case 'NexaTech Careers':
+        return 'Akun resmi rekrutmen NexaTech untuk update lowongan terbaru.';
+      default:
+        return 'Aktif berbagi update profesional.';
+    }
+  }
 
   @override
   void initState() {
@@ -57,12 +83,19 @@ class _FeedPostState extends State<FeedPost> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        post.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () => _openOwnerProfile(post),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            post.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ),
                       Text(
@@ -256,18 +289,25 @@ class _FeedPostState extends State<FeedPost> {
               children: [
                 Row(
                   children: [
-                    Text(
-                      post.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                    InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => _openOwnerProfile(post),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Text(
+                          post.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                     const Spacer(),
                     if (post.canApply)
                       SizedBox(
-                        width: 78,
+                        width: 90,
                         child: AppButton(
                           label: 'Apply',
                           onTap: () {
@@ -277,9 +317,9 @@ class _FeedPostState extends State<FeedPost> {
                               ),
                             );
                           },
-                          height: 28,
-                          fontSize: 11,
-                          borderRadius: 12,
+                          height: 34,
+                          fontSize: 12,
+                          borderRadius: 10,
                         ),
                       ),
                   ],

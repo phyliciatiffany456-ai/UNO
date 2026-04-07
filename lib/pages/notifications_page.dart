@@ -20,10 +20,24 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
+  final Set<String> _viewedStories = <String>{};
+
   @override
   void initState() {
     super.initState();
     NotificationStore.markRead();
+  }
+
+  Future<void> _openStory(String label) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _viewedStories.add(label);
+    });
   }
 
   void _openSearch(BuildContext context) {
@@ -76,16 +90,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       username: 'TiffanyPhylicia',
                       text: 'Memberi reaksi ke postinganmu',
                       streakDays: 4,
-                      viewedStory: false,
-                      onAvatarTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const StoryViewerPage(
-                              story: StoryItem(label: 'TiffanyPhylicia'),
-                            ),
-                          ),
-                        );
-                      },
+                      viewedStory: _viewedStories.contains('TiffanyPhylicia'),
+                      onAvatarTap: () => _openStory('TiffanyPhylicia'),
                       onNameTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
@@ -111,19 +117,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       username: 'NexaTech Careers',
                       text: 'Membuka lowongan baru untuk Flutter Engineer',
                       streakDays: 2,
-                      viewedStory: true,
-                      onAvatarTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const StoryViewerPage(
-                              story: StoryItem(
-                                label: 'NexaTech Careers',
-                                isViewed: true,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                      viewedStory: _viewedStories.contains('NexaTech Careers'),
+                      onAvatarTap: () => _openStory('NexaTech Careers'),
                       onNameTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
@@ -197,20 +192,10 @@ class _NotificationTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                StoryRingAvatar(
-                  size: 34,
-                  viewed: viewedStory,
-                  onTap: onAvatarTap,
-                ),
-                const CircleAvatar(
-                  radius: 11,
-                  backgroundColor: Color(0xFFE5E7EB),
-                  child: Icon(Icons.person, size: 13, color: Color(0xFF121417)),
-                ),
-              ],
+            StoryRingProfileAvatar(
+              size: 34,
+              viewed: viewedStory,
+              onTap: onAvatarTap,
             ),
             const SizedBox(width: 8),
             Expanded(
