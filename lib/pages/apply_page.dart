@@ -125,6 +125,9 @@ class _ApplyPageState extends State<ApplyPage> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (BuildContext context, int index) {
                           final PostItem job = _jobs[index];
+                          final String? currentUserId =
+                              _postService.currentUser?.id;
+                          final bool isOwner = currentUserId == job.authorId;
                           return _JobCard(
                             title: job.jobTitle ?? job.content,
                             profileName: job.name,
@@ -132,7 +135,11 @@ class _ApplyPageState extends State<ApplyPage> {
                             city: job.jobLocation ?? job.role,
                             domicile: job.jobDomicile ?? '-',
                             requirements: job.jobRequirements ?? '-',
-                            chips: <String>['Job', 'Apply Sekarang', 'UNO'],
+                            chips: <String>[
+                              'Job',
+                              isOwner ? 'Review Kandidat' : 'Apply Sekarang',
+                              'UNO',
+                            ],
                             isProfileViewed: _viewedProfiles.contains(job.name),
                             onProfileTap: () => _openStory(context, job.name),
                             onApplyTap: () => Navigator.of(context).push(
@@ -140,6 +147,7 @@ class _ApplyPageState extends State<ApplyPage> {
                                 builder: (_) => JobApplyPage(post: job),
                               ),
                             ),
+                            actionLabel: isOwner ? 'Review' : 'Apply',
                           );
                         },
                       ),
@@ -179,6 +187,7 @@ class _JobCard extends StatelessWidget {
     required this.domicile,
     required this.requirements,
     required this.chips,
+    required this.actionLabel,
     required this.isProfileViewed,
     this.onProfileTap,
     this.onApplyTap,
@@ -191,6 +200,7 @@ class _JobCard extends StatelessWidget {
   final String domicile;
   final String requirements;
   final List<String> chips;
+  final String actionLabel;
   final bool isProfileViewed;
   final VoidCallback? onProfileTap;
   final VoidCallback? onApplyTap;
@@ -281,7 +291,7 @@ class _JobCard extends StatelessWidget {
               child: SizedBox(
                 width: 90,
                 child: AppButton(
-                  label: 'Apply',
+                  label: actionLabel,
                   onTap: onApplyTap,
                   height: 34,
                   fontSize: 12,

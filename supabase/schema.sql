@@ -19,6 +19,7 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.profiles add column if not exists avatar_url text;
 
 alter table public.profiles enable row level security;
 
@@ -152,6 +153,11 @@ create table if not exists public.posts (
   job_deadline date,
   created_at timestamptz not null default now()
 );
+alter table public.posts add column if not exists job_title text;
+alter table public.posts add column if not exists job_location text;
+alter table public.posts add column if not exists job_domicile text;
+alter table public.posts add column if not exists job_requirements text;
+alter table public.posts add column if not exists job_deadline date;
 
 alter table public.posts enable row level security;
 
@@ -359,6 +365,12 @@ create table if not exists public.job_applications (
   created_at timestamptz not null default now(),
   unique (job_post_id, applicant_id)
 );
+alter table public.job_applications
+  add column if not exists reviewer_id uuid references auth.users (id) on delete set null;
+alter table public.job_applications
+  add column if not exists reviewer_note text;
+alter table public.job_applications
+  add column if not exists reviewed_at timestamptz;
 
 alter table public.job_applications enable row level security;
 
@@ -381,7 +393,15 @@ create policy "Users can insert own applications"
 on public.job_applications
 for insert
 to authenticated
-with check (auth.uid() = applicant_id);
+with check (
+  auth.uid() = applicant_id
+  and not exists (
+    select 1
+    from public.posts p
+    where p.id = job_post_id
+      and p.author_id = applicant_id
+  )
+);
 
 drop policy if exists "Applicants can update own application file" on public.job_applications;
 create policy "Applicants can update own application file"
@@ -413,6 +433,65 @@ with check (
     where p.id = job_post_id and p.author_id = auth.uid()
   )
 );
+
+create or replace function public.owner_update_application_status(
+  target_application_id uuid,
+  new_status text,
+  new_note text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_uid uuid;
+  target_job_post_id uuid;
+  target_owner_id uuid;
+begin
+  current_uid := auth.uid();
+  if current_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if new_status not in ('waiting_review', 'under_review', 'accepted', 'rejected') then
+    raise exception 'invalid_status';
+  end if;
+
+  select ja.job_post_id
+  into target_job_post_id
+  from public.job_applications ja
+  where ja.id = target_application_id
+  limit 1;
+
+  if target_job_post_id is null then
+    raise exception 'application_not_found';
+  end if;
+
+  select p.author_id
+  into target_owner_id
+  from public.posts p
+  where p.id = target_job_post_id
+  limit 1;
+
+  if target_owner_id is null or target_owner_id <> current_uid then
+    raise exception 'not_job_owner';
+  end if;
+
+  update public.job_applications
+  set
+    status = new_status,
+    reviewer_id = current_uid,
+    reviewer_note = new_note,
+    reviewed_at = now()
+  where id = target_application_id;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.owner_update_application_status(uuid, text, text) from public;
+grant execute on function public.owner_update_application_status(uuid, text, text) to authenticated;
 
 insert into storage.buckets (id, name, public)
 values ('job-cvs', 'job-cvs', true)

@@ -20,6 +20,8 @@ class _JobApplyPageState extends State<JobApplyPage> {
 
   bool _submitted = false;
   bool _uploadingCv = false;
+  bool _loadingApplications = false;
+  List<JobApplicationRecord> _applications = <JobApplicationRecord>[];
   int _visibleStatusCount = 0;
   bool _showStatusTitle = false;
 
@@ -28,6 +30,41 @@ class _JobApplyPageState extends State<JobApplyPage> {
     'Application Seen by the HR...',
     'Waiting for review...',
   ];
+
+  bool get _isOwner => _applicationService.currentUser?.id == widget.post.authorId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isOwner) {
+      _loadApplications();
+    }
+  }
+
+  Future<void> _loadApplications() async {
+    setState(() {
+      _loadingApplications = true;
+    });
+    try {
+      final List<JobApplicationRecord> rows = await _applicationService
+          .fetchApplicationsForJob(widget.post.id);
+      if (!mounted) return;
+      setState(() {
+        _applications = rows;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memuat pelamar.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingApplications = false;
+        });
+      }
+    }
+  }
 
   Future<void> _pickAndUploadCv() async {
     setState(() {
@@ -73,6 +110,14 @@ class _JobApplyPageState extends State<JobApplyPage> {
   }
 
   Future<void> _submitCv() async {
+    if (_isOwner) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pemilik loker tidak bisa submit CV sendiri.'),
+        ),
+      );
+      return;
+    }
     final String? fileName = CvStore.fileName.value;
     final String? filePath = CvStore.filePath.value;
     final String? fileUrl = CvStore.fileUrl.value;
@@ -127,6 +172,28 @@ class _JobApplyPageState extends State<JobApplyPage> {
     }
   }
 
+  Future<void> _updateStatus(
+    JobApplicationRecord record,
+    String status,
+  ) async {
+    try {
+      await _applicationService.updateApplicationStatus(
+        applicationId: record.id,
+        status: status,
+      );
+      await _loadApplications();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Status ${record.applicantName} -> $status')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal update status: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -175,6 +242,113 @@ class _JobApplyPageState extends State<JobApplyPage> {
             ),
           ),
           const SizedBox(height: 14),
+          if (_isOwner) ...[
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF13151A),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF24262E)),
+              ),
+              child: _loadingApplications
+                  ? const Center(child: CircularProgressIndicator())
+                  : _applications.isEmpty
+                  ? const Text(
+                      'Belum ada kandidat yang submit CV.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Review Kandidat',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ..._applications.map((JobApplicationRecord item) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F1013),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF2D313B)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.applicantName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'CV: ${item.cvFileName}',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                Text(
+                                  'Status: ${item.status}',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Review',
+                                        onTap: () =>
+                                            _updateStatus(item, 'under_review'),
+                                        variant: AppButtonVariant.outline,
+                                        height: 32,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Accept',
+                                        onTap: () =>
+                                            _updateStatus(item, 'accepted'),
+                                        height: 32,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Reject',
+                                        onTap: () =>
+                                            _updateStatus(item, 'rejected'),
+                                        variant: AppButtonVariant.outline,
+                                        height: 32,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+            ),
+            const SizedBox(height: 12),
+          ],
           ValueListenableBuilder<String?>(
             valueListenable: CvStore.fileName,
             builder: (BuildContext context, String? fileName, Widget? child) {
@@ -218,7 +392,9 @@ class _JobApplyPageState extends State<JobApplyPage> {
                         width: 106,
                         child: AppButton(
                           label: _uploadingCv ? 'Uploading...' : 'Upload CV',
-                          onTap: _uploadingCv ? null : _pickAndUploadCv,
+                          onTap: (_uploadingCv || _isOwner)
+                              ? null
+                              : _pickAndUploadCv,
                           variant: AppButtonVariant.outline,
                           height: 34,
                           fontSize: 11,
@@ -229,7 +405,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
                         width: 96,
                         child: AppButton(
                           label: _submitted ? 'Submitted' : 'Submit CV',
-                          onTap: _submitted ? null : _submitCv,
+                          onTap: (_submitted || _isOwner) ? null : _submitCv,
                           height: 34,
                           fontSize: 11,
                         ),
@@ -249,9 +425,11 @@ class _JobApplyPageState extends State<JobApplyPage> {
               border: Border.all(color: const Color(0xFF24262E)),
             ),
             child: !_submitted
-                ? const Text(
-                    'Status akan muncul setelah CV berhasil disubmit.',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
+                ? Text(
+                    _isOwner
+                        ? 'Kamu pemilik loker. Review kandidat dari daftar di atas.'
+                        : 'Status akan muncul setelah CV berhasil disubmit.',
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

@@ -16,6 +16,32 @@ class CvUploadResult {
   final String publicUrl;
 }
 
+class JobApplicationRecord {
+  const JobApplicationRecord({
+    required this.id,
+    required this.jobPostId,
+    required this.applicantId,
+    required this.applicantName,
+    required this.cvFileName,
+    required this.cvPublicUrl,
+    required this.status,
+    this.reviewerNote,
+    this.reviewedAt,
+    this.createdAt,
+  });
+
+  final String id;
+  final String jobPostId;
+  final String applicantId;
+  final String applicantName;
+  final String cvFileName;
+  final String cvPublicUrl;
+  final String status;
+  final String? reviewerNote;
+  final DateTime? reviewedAt;
+  final DateTime? createdAt;
+}
+
 class JobApplicationService {
   JobApplicationService({
     SupabaseClient? client,
@@ -28,6 +54,8 @@ class JobApplicationService {
 
   final SupabaseClient _client;
   final Random _random;
+
+  User? get currentUser => _client.auth.currentUser;
 
   User _requireUser() {
     final User? user = _client.auth.currentUser;
@@ -72,6 +100,15 @@ class JobApplicationService {
     required CvUploadResult cv,
   }) async {
     final User user = _requireUser();
+    final List<Map<String, dynamic>> posts = await _client
+        .from('posts')
+        .select('author_id')
+        .eq('id', jobPostId)
+        .limit(1);
+    if (posts.isNotEmpty && posts.first['author_id']?.toString() == user.id) {
+      throw Exception('Pemilik loker tidak bisa submit CV ke post sendiri.');
+    }
+
     await _client.from(applicationsTable).upsert(
       <String, dynamic>{
         'job_post_id': jobPostId,
@@ -82,6 +119,69 @@ class JobApplicationService {
         'status': 'waiting_review',
       },
       onConflict: 'job_post_id,applicant_id',
+    );
+  }
+
+  Future<List<JobApplicationRecord>> fetchApplicationsForJob(
+    String jobPostId,
+  ) async {
+    final User reviewer = _requireUser();
+    final List<Map<String, dynamic>> rows = await _client
+        .from(applicationsTable)
+        .select()
+        .eq('job_post_id', jobPostId)
+        .neq('applicant_id', reviewer.id)
+        .order('created_at', ascending: false);
+
+    final List<String> applicantIds = rows
+        .map((Map<String, dynamic> row) => row['applicant_id'].toString())
+        .toSet()
+        .toList();
+    Map<String, String> applicantNames = <String, String>{};
+    if (applicantIds.isNotEmpty) {
+      final List<Map<String, dynamic>> profileRows = await _client
+          .from('profiles')
+          .select('user_id,full_name')
+          .inFilter('user_id', applicantIds);
+      applicantNames = <String, String>{
+        for (final Map<String, dynamic> row in profileRows)
+          row['user_id'].toString():
+              (row['full_name'] as String?)?.trim().isNotEmpty == true
+                  ? row['full_name'].toString()
+                  : 'User',
+      };
+    }
+
+    return rows.map((Map<String, dynamic> row) {
+      final String applicantId = row['applicant_id'].toString();
+      return JobApplicationRecord(
+        id: row['id'].toString(),
+        jobPostId: row['job_post_id'].toString(),
+        applicantId: applicantId,
+        applicantName: applicantNames[applicantId] ?? applicantId,
+        cvFileName: (row['cv_file_name'] as String?) ?? '-',
+        cvPublicUrl: (row['cv_public_url'] as String?) ?? '',
+        status: (row['status'] as String?) ?? 'waiting_review',
+        reviewerNote: row['reviewer_note'] as String?,
+        reviewedAt: DateTime.tryParse((row['reviewed_at'] as String?) ?? ''),
+        createdAt: DateTime.tryParse((row['created_at'] as String?) ?? ''),
+      );
+    }).toList();
+  }
+
+  Future<void> updateApplicationStatus({
+    required String applicationId,
+    required String status,
+    String? reviewerNote,
+  }) async {
+    _requireUser();
+    await _client.rpc(
+      'owner_update_application_status',
+      params: <String, dynamic>{
+        'target_application_id': applicationId,
+        'new_status': status,
+        'new_note': reviewerNote,
+      },
     );
   }
 

@@ -35,6 +35,9 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
   int _insightCount = 0;
   int _shortCount = 0;
   int _jobCount = 0;
+  int _totalLikeCount = 0;
+  int _totalCommentCount = 0;
+  int _totalShareCount = 0;
 
   int _applicationCount = 0;
   int _submittedCount = 0;
@@ -91,15 +94,31 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
           final String status =
               ((row as Map<String, dynamic>)['status'] as String? ?? '')
                   .toLowerCase();
-          if (status == 'submitted') submittedCount += 1;
-          if (status == 'review' || status == 'in_review') reviewCount += 1;
-          if (status == 'interview') interviewCount += 1;
+          if (status == 'submitted' || status == 'waiting_review') {
+            submittedCount += 1;
+          }
+          if (status == 'review' || status == 'in_review' || status == 'under_review') {
+            reviewCount += 1;
+          }
+          if (status == 'interview' || status == 'accepted') interviewCount += 1;
         }
       } catch (_) {
         // Ignore when table is not created yet.
       }
 
       if (!mounted) return;
+      final int likeTotal = myPosts.fold<int>(
+        0,
+        (int total, PostItem post) => total + post.likeCount,
+      );
+      final int commentTotal = myPosts.fold<int>(
+        0,
+        (int total, PostItem post) => total + post.commentCount,
+      );
+      final int shareTotal = myPosts.fold<int>(
+        0,
+        (int total, PostItem post) => total + post.shareCount,
+      );
       setState(() {
         _displayName = name;
         _bio = bio;
@@ -109,6 +128,9 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
         _shortCount =
             myPosts.where((PostItem p) => p.type == PostType.short).length;
         _jobCount = myPosts.where((PostItem p) => p.type == PostType.job).length;
+        _totalLikeCount = likeTotal;
+        _totalCommentCount = commentTotal;
+        _totalShareCount = shareTotal;
         _applicationCount = applicationCount;
         _submittedCount = submittedCount;
         _reviewCount = reviewCount;
@@ -272,6 +294,26 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
                         _MetricRowData(label: 'Insight', value: '$_insightCount'),
                         _MetricRowData(label: 'Short', value: '$_shortCount'),
                         _MetricRowData(label: 'Loker', value: '$_jobCount'),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _MetricCard(
+                      title: 'Engagement Postingan',
+                      total:
+                          '${_totalLikeCount + _totalCommentCount + _totalShareCount}',
+                      rows: <_MetricRowData>[
+                        _MetricRowData(
+                          label: 'Total Like',
+                          value: '$_totalLikeCount',
+                        ),
+                        _MetricRowData(
+                          label: 'Total Komentar',
+                          value: '$_totalCommentCount',
+                        ),
+                        _MetricRowData(
+                          label: 'Total Share',
+                          value: '$_totalShareCount',
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
