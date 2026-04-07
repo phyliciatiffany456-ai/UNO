@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/notification_store.dart';
+import '../models/story_seen_store.dart';
 import '../navigation/app_routes.dart';
 import '../models/post_item.dart';
 import '../models/story_item.dart';
@@ -18,38 +20,30 @@ import 'story_viewer_page.dart';
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
-  static const List<StoryItem> initialStories = <StoryItem>[
-    StoryItem(label: 'Your Short', isMine: true, isViewed: false),
-    StoryItem(label: 'Rani HRD', isViewed: false),
-    StoryItem(label: 'Fajar Dev', isViewed: false),
-    StoryItem(label: 'Nadia PM', isViewed: false),
-    StoryItem(label: 'Arga UX', isViewed: false),
-    StoryItem(label: 'Dita Data', isViewed: false),
-  ];
-
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   final PostService _postService = PostService();
-  late List<StoryItem> stories;
+  List<StoryItem> stories = <StoryItem>[];
   List<PostItem> _posts = <PostItem>[];
   bool _loadingPosts = true;
 
   @override
   void initState() {
     super.initState();
-    stories = List<StoryItem>.from(HomePage.initialStories);
     _loadFeed();
   }
 
   Future<void> _openStory(int index) async {
+    if (index < 0 || index >= stories.length) return;
     final StoryItem story = stories[index];
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: story)),
     );
-    if (!mounted || story.isViewed) return;
+    StorySeenStore.markSeen(authorId: story.authorId, label: story.label);
+    if (!mounted) return;
     setState(() {
       stories[index] = story.copyWith(isViewed: true);
     });
@@ -58,13 +52,17 @@ class _HomePageState extends State<HomePage> {
   void _openCreatePage() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage()));
+    )
+        .push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage()))
+        .then((_) => _loadFeed());
   }
 
   void _openCreateShortPage() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const CreateShortPage()));
+    )
+        .push(MaterialPageRoute<void>(builder: (_) => const CreateShortPage()))
+        .then((_) => _loadFeed());
   }
 
   void _openNotificationsPage() {
@@ -83,7 +81,10 @@ class _HomePageState extends State<HomePage> {
     final User? user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       if (!mounted) return;
-      AppRoutes.goLogin(context);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        AppRoutes.goLogin(context);
+      });
       return;
     }
 
@@ -94,8 +95,16 @@ class _HomePageState extends State<HomePage> {
     try {
       final List<PostItem> posts = await _postService.fetchFeed();
       if (!mounted) return;
+      final DateTime? latestPostAt = posts.isNotEmpty ? posts.first.createdAt : null;
+      final String? latestAuthorId = posts.isNotEmpty ? posts.first.authorId : null;
+      NotificationStore.syncWithLatestPost(
+        latestPostAt,
+        latestAuthorId: latestAuthorId,
+        currentUserId: user.id,
+      );
       setState(() {
         _posts = posts;
+        stories = _buildStories(posts, user.id);
       });
     } catch (_) {
       _showMessage('Gagal memuat feed dari database.');
@@ -106,6 +115,33 @@ class _HomePageState extends State<HomePage> {
         });
       }
     }
+  }
+
+  List<StoryItem> _buildStories(List<PostItem> posts, String currentUserId) {
+    final Set<String> seenAuthorIds = <String>{};
+    final List<StoryItem> result = <StoryItem>[];
+    final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+
+    for (final PostItem post in posts) {
+      if (post.type != PostType.short) continue;
+      final DateTime? createdAt = post.createdAt;
+      if (createdAt == null || createdAt.isBefore(threshold)) continue;
+      if (seenAuthorIds.contains(post.authorId)) continue;
+      seenAuthorIds.add(post.authorId);
+      result.add(
+        StoryItem(
+          label: post.name,
+          authorId: post.authorId,
+          isMine: post.authorId == currentUserId,
+          isViewed: StorySeenStore.isSeen(
+            authorId: post.authorId,
+            label: post.name,
+          ),
+        ),
+      );
+    }
+
+    return result;
   }
 
   void _showMessage(String message) {
@@ -126,12 +162,14 @@ class _HomePageState extends State<HomePage> {
               onSearchTap: _openSearchPage,
             ),
             const SizedBox(height: 10),
-            Stories(
-              stories: stories,
-              onStoryTap: _openStory,
-              onMineAddTap: _openCreateShortPage,
-            ),
-            const SizedBox(height: 8),
+            if (stories.isNotEmpty) ...<Widget>[
+              Stories(
+                stories: stories,
+                onStoryTap: _openStory,
+                onMineAddTap: _openCreateShortPage,
+              ),
+              const SizedBox(height: 8),
+            ],
             Expanded(
               child: _loadingPosts
                   ? const Center(child: CircularProgressIndicator())

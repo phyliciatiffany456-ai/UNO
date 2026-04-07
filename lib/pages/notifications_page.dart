@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/notification_store.dart';
-import '../navigation/app_routes.dart';
+import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../navigation/app_routes.dart';
+import '../services/post_service.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/story_ring_avatar.dart';
 import '../widgets/top_bar.dart';
@@ -20,23 +22,53 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
+  final PostService _postService = PostService();
   final Set<String> _viewedStories = <String>{};
+
+  List<PostItem> _notificationPosts = <PostItem>[];
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     NotificationStore.markRead();
+    _loadNotifications();
   }
 
-  Future<void> _openStory(String label) async {
+  Future<void> _loadNotifications() async {
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final List<PostItem> posts = await _postService.fetchFeed();
+      if (!mounted) return;
+      setState(() {
+        _notificationPosts = posts.take(30).toList();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memuat notifikasi dari database.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openStory(PostItem post) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+        builder: (_) => StoryViewerPage(story: StoryItem(label: post.name)),
       ),
     );
     if (!mounted) return;
     setState(() {
-      _viewedStories.add(label);
+      _viewedStories.add(post.authorId);
     });
   }
 
@@ -52,6 +84,22 @@ class _NotificationsPageState extends State<NotificationsPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage()));
   }
 
+  String _notificationText(PostItem post) {
+    switch (post.type) {
+      case PostType.job:
+        return 'Membuka lowongan baru: ${post.content}';
+      case PostType.short:
+        return 'Mengunggah short baru';
+      case PostType.insight:
+        return 'Membuat postingan baru';
+    }
+  }
+
+  int _streakFromPost(PostItem post) {
+    final int seed = post.id.hashCode.abs();
+    return (seed % 7) + 1;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -63,87 +111,85 @@ class _NotificationsPageState extends State<NotificationsPage> {
               onSearchTap: () => _openSearch(context),
             ),
             const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF13151A),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF24262E)),
-                ),
-                child: Column(
-                  children: [
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Notifikasi Terbaru',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF13151A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF24262E)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Notifikasi Terbaru',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    _NotificationTile(
-                      username: 'TiffanyPhylicia',
-                      text: 'Memberi reaksi ke postinganmu',
-                      streakDays: 4,
-                      viewedStory: _viewedStories.contains('TiffanyPhylicia'),
-                      onAvatarTap: () => _openStory('TiffanyPhylicia'),
-                      onNameTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const ChatProfileInfoPage(
-                              name: 'TiffanyPhylicia',
-                              role: 'UI/UX Designer',
-                              bio:
-                                  'Suka bangun produk digital dan kolaborasi bareng tim lintas divisi.',
-                            ),
-                          ),
-                        );
-                      },
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const PostZoomPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    _NotificationTile(
-                      username: 'NexaTech Careers',
-                      text: 'Membuka lowongan baru untuk Flutter Engineer',
-                      streakDays: 2,
-                      viewedStory: _viewedStories.contains('NexaTech Careers'),
-                      onAvatarTap: () => _openStory('NexaTech Careers'),
-                      onNameTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const ChatProfileInfoPage(
-                              name: 'NexaTech Careers',
-                              role: 'Company',
-                              bio:
-                                  'Akun resmi rekrutmen NexaTech untuk update lowongan terbaru.',
-                            ),
-                          ),
-                        );
-                      },
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const PostZoomPage(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: _loading
+                            ? const Center(child: CircularProgressIndicator())
+                            : _notificationPosts.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  'Belum ada notifikasi.',
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                              )
+                            : RefreshIndicator(
+                                onRefresh: _loadNotifications,
+                                child: ListView.separated(
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  itemCount: _notificationPosts.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 8),
+                                  itemBuilder: (BuildContext context, int index) {
+                                    final PostItem post = _notificationPosts[index];
+                                    return _NotificationTile(
+                                      username: post.name,
+                                      text: _notificationText(post),
+                                      streakDays: _streakFromPost(post),
+                                      viewedStory: _viewedStories.contains(
+                                        post.authorId,
+                                      ),
+                                      onAvatarTap: () => _openStory(post),
+                                      onNameTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => ChatProfileInfoPage(
+                                              name: post.name,
+                                              role: post.role,
+                                              bio: post.content,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => PostZoomPage(post: post),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const Spacer(),
           ],
         ),
       ),

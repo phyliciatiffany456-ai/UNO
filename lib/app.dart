@@ -8,7 +8,7 @@ class UnoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isLoggedIn = Supabase.instance.client.auth.currentSession != null;
+    final bool isLoggedIn = Supabase.instance.client.auth.currentUser != null;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'UNO LinkedIn Social',

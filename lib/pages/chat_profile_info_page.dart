@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../models/story_seen_store.dart';
+import '../services/post_service.dart';
+import '../services/profile_service.dart';
+import '../services/social_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/expandable_text.dart';
 import '../widgets/profile_ring_avatar.dart';
@@ -12,11 +17,13 @@ class ChatProfileInfoPage extends StatefulWidget {
   const ChatProfileInfoPage({
     super.key,
     required this.name,
+    this.userId,
     this.role = 'Member',
     this.bio = 'Belum ada bio.',
   });
 
   final String name;
+  final String? userId;
   final String role;
   final String bio;
 
@@ -25,44 +32,131 @@ class ChatProfileInfoPage extends StatefulWidget {
 }
 
 class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
-  bool _viewedStory = false;
-  bool _following = true;
+  final ProfileService _profileService = ProfileService();
+  final PostService _postService = PostService();
+  final SocialService _socialService = SocialService();
 
-  List<String> get _posts {
-    switch (widget.name) {
-      case 'TiffanyPhylicia':
-        return <String>[
-          'Insight: Portofolio yang kuat bukan cuma visual bagus, tapi proses problem solving yang jelas.',
-          'Weekly design notes: sebelum finalize UI, selalu validasi flow dengan user scenario.',
-          'Lagi eksperimen component library yang rapi biar handoff ke dev lebih cepat.',
-        ];
-      case 'fajar.engineer':
-        return <String>[
-          'Short: Flutter tip hari ini, pisahkan widget reusable dari awal supaya scaling lebih gampang.',
-          'Tips debugging: cek state lifecycle dulu sebelum nyalahin API.',
-        ];
-      case 'NexaTech Careers':
-        return <String>[
-          'Loker: Flutter Developer (Remote). Butuh pengalaman state management dan integrasi API.',
-          'Open role: UI Engineer hybrid Jakarta, kolaborasi langsung bareng product team.',
-        ];
-      default:
-        return <String>[
-          '${widget.name} belum banyak posting, tapi aktif berbagi update profesional.',
-        ];
+  bool _viewedStory = false;
+  bool _following = false;
+  bool _loading = true;
+
+  String _name = '';
+  String _role = '';
+  String _bio = '';
+  String? _avatarUrl;
+  int _followerCount = 0;
+  int _followingCount = 0;
+  bool _hasStory = false;
+  List<PostItem> _posts = <PostItem>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _name = widget.name;
+    _role = widget.role;
+    _bio = widget.bio;
+    _load();
+  }
+
+  Future<void> _load() async {
+    final String? targetUserId = widget.userId;
+    if (targetUserId == null) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
+      return;
+    }
+
+    try {
+      final ProfileRecord? profile = await _profileService.fetchProfileByUserId(
+        targetUserId,
+      );
+      final List<PostItem> feed = await _postService.fetchFeed();
+      final List<PostItem> posts =
+          feed.where((PostItem p) => p.authorId == targetUserId).toList();
+      final Map<String, int> followStats = await _socialService.getFollowStats(
+        targetUserId,
+      );
+      final Set<String> myFollowing = await _socialService.getFollowingIds();
+      final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+
+      if (!mounted) return;
+      setState(() {
+        if (profile != null) {
+          _name = profile.fullName;
+          _role = profile.role;
+          _bio = profile.bio;
+          _avatarUrl = profile.avatarUrl;
+        }
+        _posts = posts;
+        _followerCount = followStats['followers'] ?? 0;
+        _followingCount = followStats['following'] ?? 0;
+        _following = myFollowing.contains(targetUserId);
+        _hasStory = posts.any(
+          (PostItem p) =>
+              p.type == PostType.short &&
+              p.createdAt != null &&
+              p.createdAt!.isAfter(threshold),
+        );
+        _viewedStory = StorySeenStore.isSeen(
+          authorId: targetUserId,
+          label: _name,
+        );
+      });
+    } catch (_) {
+      // keep fallback UI
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
   Future<void> _openStory() async {
+    final String? userId = widget.userId;
+    if (!_hasStory || userId == null) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: StoryItem(label: widget.name)),
+        builder: (_) => StoryViewerPage(
+          story: StoryItem(label: _name, authorId: userId),
+        ),
       ),
     );
+    StorySeenStore.markSeen(authorId: userId, label: _name);
     if (!mounted) return;
     setState(() {
       _viewedStory = true;
     });
+  }
+
+  Future<void> _toggleFollow() async {
+    final String? targetUserId = widget.userId;
+    if (targetUserId == null) return;
+    final String? myUserId = _socialService.currentUser?.id;
+    if (myUserId == targetUserId) return;
+    final bool next = !_following;
+    setState(() {
+      _following = next;
+      _followerCount += next ? 1 : -1;
+      if (_followerCount < 0) _followerCount = 0;
+    });
+    try {
+      if (next) {
+        await _socialService.followUser(targetUserId);
+      } else {
+        await _socialService.unfollowUser(targetUserId);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _following = !next;
+        _followerCount += next ? -1 : 1;
+        if (_followerCount < 0) _followerCount = 0;
+      });
+    }
   }
 
   Future<void> _openShareSheet() async {
@@ -113,128 +207,142 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Profil')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ProfileRingAvatar(
-                label: widget.name,
-                size: 80,
-                viewed: _viewedStory,
-                onTap: _openStory,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        fontStyle: FontStyle.italic,
-                      ),
+                    ProfileRingAvatar(
+                      label: _name,
+                      size: 80,
+                      viewed: _viewedStory,
+                      hasStory: _hasStory,
+                      imageUrl: _avatarUrl,
+                      onTap: _hasStory ? _openStory : null,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.role,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _role,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _ProfileStat(
+                                label: 'Postingan',
+                                value: '${_posts.length}',
+                              ),
+                              _ProfileStat(
+                                label: 'Pengikut',
+                                value: '$_followerCount',
+                              ),
+                              _ProfileStat(
+                                label: 'Mengikuti',
+                                value: '$_followingCount',
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _ProfileStat(
-                          label: 'Postingan',
-                          value: '${_posts.length}',
-                        ),
-                        const _ProfileStat(label: 'Pengikut', value: '4.2K'),
-                        const _ProfileStat(label: 'Mengikuti', value: '173'),
-                      ],
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ExpandableText(
-            text: widget.bio,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              fontStyle: FontStyle.italic,
-            ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: AppButton(
-                  label: _following ? 'Mengikuti' : 'Ikuti',
-                  onTap: () {
-                    setState(() {
-                      _following = !_following;
-                    });
-                  },
-                  variant: _following
-                      ? AppButtonVariant.outline
-                      : AppButtonVariant.primary,
-                  height: 32,
-                  fontSize: 12,
-                  borderRadius: 8,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: AppButton(
-                  label: 'Chat',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ChatBoxPage(),
-                    ),
+                const SizedBox(height: 8),
+                ExpandableText(
+                  text: _bio,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontStyle: FontStyle.italic,
                   ),
-                  variant: AppButtonVariant.outline,
-                  height: 32,
-                  fontSize: 12,
-                  borderRadius: 8,
+                  maxLines: 2,
                 ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: AppButton(
-                  label: 'Bagikan Profil',
-                  onTap: _openShareSheet,
-                  variant: AppButtonVariant.outline,
-                  height: 32,
-                  fontSize: 12,
-                  borderRadius: 8,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (_socialService.currentUser?.id != widget.userId)
+                      Expanded(
+                        child: AppButton(
+                          label: _following ? 'Mengikuti' : 'Ikuti',
+                          onTap: _toggleFollow,
+                          variant: _following
+                              ? AppButtonVariant.outline
+                              : AppButtonVariant.primary,
+                          height: 32,
+                          fontSize: 12,
+                          borderRadius: 8,
+                        ),
+                      ),
+                    if (_socialService.currentUser?.id != widget.userId)
+                      const SizedBox(width: 6),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Chat',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ChatBoxPage(),
+                          ),
+                        ),
+                        variant: AppButtonVariant.outline,
+                        height: 32,
+                        fontSize: 12,
+                        borderRadius: 8,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Bagikan Profil',
+                        onTap: _openShareSheet,
+                        variant: AppButtonVariant.outline,
+                        height: 32,
+                        fontSize: 12,
+                        borderRadius: 8,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Postingan',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+                const SizedBox(height: 10),
+                const Text(
+                  'Postingan',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (_posts.isEmpty)
+                  const Text(
+                    'Belum ada postingan.',
+                    style: TextStyle(color: Colors.white70),
+                  )
+                else
+                  ..._posts.map((PostItem post) => _PostItemCard(post: post)),
+              ],
             ),
-          ),
-          const SizedBox(height: 6),
-          ..._posts.map((String text) => _PostItemCard(text: text)),
-        ],
-      ),
     );
   }
 }
@@ -275,9 +383,9 @@ class _ProfileStat extends StatelessWidget {
 }
 
 class _PostItemCard extends StatelessWidget {
-  const _PostItemCard({required this.text});
+  const _PostItemCard({required this.post});
 
-  final String text;
+  final PostItem post;
 
   @override
   Widget build(BuildContext context) {
@@ -285,9 +393,9 @@ class _PostItemCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: (_) => const PostZoomPage())),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => PostZoomPage(post: post)),
+        ),
         child: Container(
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
           decoration: BoxDecoration(
@@ -298,14 +406,16 @@ class _PostItemCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(
+              SizedBox(
                 height: 130,
                 width: double.infinity,
-                child: ColoredBox(color: Color(0xFFC8C8C8)),
+                child: post.imageUrls.isNotEmpty
+                    ? Image.network(post.imageUrls.first, fit: BoxFit.cover)
+                    : const ColoredBox(color: Color(0xFFC8C8C8)),
               ),
               const SizedBox(height: 8),
               Text(
-                text,
+                post.content,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(

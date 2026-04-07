@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../navigation/app_routes.dart';
+import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../navigation/app_routes.dart';
+import '../services/post_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/top_bar.dart';
@@ -20,6 +22,41 @@ class ApplyPage extends StatefulWidget {
 
 class _ApplyPageState extends State<ApplyPage> {
   final Set<String> _viewedProfiles = <String>{};
+  final PostService _postService = PostService();
+
+  List<PostItem> _jobs = <PostItem>[];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadJobs();
+  }
+
+  Future<void> _loadJobs() async {
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final List<PostItem> posts = await _postService.fetchFeed();
+      if (!mounted) return;
+      setState(() {
+        _jobs = posts.where((PostItem post) => post.type == PostType.job).toList();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memuat data loker dari database.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
 
   void _openNotifications(BuildContext context) {
     Navigator.of(
@@ -71,43 +108,42 @@ class _ApplyPageState extends State<ApplyPage> {
               ),
             ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                children: [
-                  _JobCard(
-                    title: 'IT Specialist',
-                    profileName: 'TiffanyPhylicia',
-                    salary: 'Rp 5-6 Juta',
-                    city: 'Jakarta Barat',
-                    chips: ['Fulltime', 'SMA/SMK', 'HTML', 'Java'],
-                    isProfileViewed: _viewedProfiles.contains(
-                      'TiffanyPhylicia',
-                    ),
-                    onProfileTap: () => _openStory(context, 'TiffanyPhylicia'),
-                    onApplyTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            const JobApplyPage(company: 'TiffanyPhylicia'),
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _jobs.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Belum ada loker di database.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadJobs,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                        itemCount: _jobs.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (BuildContext context, int index) {
+                          final PostItem job = _jobs[index];
+                          return _JobCard(
+                            title: job.jobTitle ?? job.content,
+                            profileName: job.name,
+                            salary: _deadlineText(job),
+                            city: job.jobLocation ?? job.role,
+                            domicile: job.jobDomicile ?? '-',
+                            requirements: job.jobRequirements ?? '-',
+                            chips: <String>['Job', 'Apply Sekarang', 'UNO'],
+                            isProfileViewed: _viewedProfiles.contains(job.name),
+                            onProfileTap: () => _openStory(context, job.name),
+                            onApplyTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => JobApplyPage(post: job),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  _JobCard(
-                    title: 'Customer Service',
-                    profileName: 'Rani HRD',
-                    salary: 'Rp 5-6 Juta',
-                    city: 'Jakarta Barat',
-                    chips: ['Fulltime', 'SMA/SMK', 'Communication Skill'],
-                    isProfileViewed: _viewedProfiles.contains('Rani HRD'),
-                    onProfileTap: () => _openStory(context, 'Rani HRD'),
-                    onApplyTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const JobApplyPage(company: 'Rani HRD'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -124,6 +160,14 @@ class _ApplyPageState extends State<ApplyPage> {
       ),
     );
   }
+
+  String _deadlineText(PostItem job) {
+    final DateTime? deadline = job.jobDeadline;
+    if (deadline == null) return 'Open';
+    final String month = deadline.month.toString().padLeft(2, '0');
+    final String day = deadline.day.toString().padLeft(2, '0');
+    return 'Deadline $day/$month/${deadline.year}';
+  }
 }
 
 class _JobCard extends StatelessWidget {
@@ -132,6 +176,8 @@ class _JobCard extends StatelessWidget {
     required this.profileName,
     required this.salary,
     required this.city,
+    required this.domicile,
+    required this.requirements,
     required this.chips,
     required this.isProfileViewed,
     this.onProfileTap,
@@ -142,6 +188,8 @@ class _JobCard extends StatelessWidget {
   final String profileName;
   final String salary;
   final String city;
+  final String domicile;
+  final String requirements;
   final List<String> chips;
   final bool isProfileViewed;
   final VoidCallback? onProfileTap;
@@ -164,16 +212,20 @@ class _JobCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    fontStyle: FontStyle.italic,
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Text(
                   salary,
                   style: const TextStyle(
@@ -202,6 +254,18 @@ class _JobCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Domisili: $domicile',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Kriteria: $requirements',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -270,14 +334,6 @@ class _StoryProfile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Gradient ringGradient = viewed
-        ? const LinearGradient(colors: [Color(0xFF6B7280), Color(0xFF6B7280)])
-        : const LinearGradient(
-            colors: [Color(0xFFFEDA75), Color(0xFFFA7E1E), Color(0xFFD62976)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          );
-
     return SizedBox(
       width: 70,
       child: InkWell(
@@ -290,7 +346,7 @@ class _StoryProfile extends StatelessWidget {
               height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: ringGradient,
+                color: viewed ? const Color(0xFF6B7280) : const Color(0xFF2D313B),
               ),
               child: Center(
                 child: Container(

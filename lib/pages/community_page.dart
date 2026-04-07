@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../navigation/app_routes.dart';
+import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../models/story_seen_store.dart';
+import '../navigation/app_routes.dart';
+import '../services/post_service.dart';
+import '../services/social_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/feed_post.dart';
 import '../widgets/stories.dart';
 import '../widgets/top_bar.dart';
-import 'chat_box_page.dart';
+import 'chat_profile_info_page.dart';
 import 'create_post_page.dart';
 import 'create_short_page.dart';
 import 'notifications_page.dart';
@@ -21,17 +26,94 @@ class CommunityPage extends StatefulWidget {
 }
 
 class _CommunityPageState extends State<CommunityPage> {
-  final List<StoryItem> _stories = <StoryItem>[
-    StoryItem(label: 'Your Story', isMine: true),
-    StoryItem(label: 'phylicia.tif'),
-    StoryItem(label: 'tiffany456'),
-    StoryItem(label: 'tiffany.ph'),
-    StoryItem(label: 'pli'),
-  ];
+  final PostService _postService = PostService();
+  final SocialService _socialService = SocialService();
 
-  final Set<String> _viewedInlineProfiles = <String>{};
+  List<StoryItem> _stories = <StoryItem>[];
+  List<PostItem> _posts = <PostItem>[];
+  List<StoryItem> _communityPeople = <StoryItem>[];
 
   bool _friendMode = true;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCommunity();
+  }
+
+  Future<void> _loadCommunity() async {
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final List<PostItem> posts = await _postService.fetchFeed();
+      final List<StoryItem> stories = _buildStories(posts);
+      final List<StoryItem> people = await _buildCommunityPeople(stories);
+
+      if (!mounted) return;
+      setState(() {
+        _posts = posts;
+        _stories = stories;
+        _communityPeople = people;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memuat data komunitas.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  List<StoryItem> _buildStories(List<PostItem> posts) {
+    final Set<String> seen = <String>{};
+    final List<StoryItem> result = <StoryItem>[];
+    final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+    for (final PostItem post in posts) {
+      if (post.type != PostType.short) continue;
+      final DateTime? createdAt = post.createdAt;
+      if (createdAt == null || createdAt.isBefore(threshold)) continue;
+      if (seen.contains(post.authorId)) continue;
+      seen.add(post.authorId);
+      result.add(
+        StoryItem(
+          label: post.name,
+          authorId: post.authorId,
+          isViewed: StorySeenStore.isSeen(
+            authorId: post.authorId,
+            label: post.name,
+          ),
+        ),
+      );
+    }
+    return result;
+  }
+
+  Future<List<StoryItem>> _buildCommunityPeople(List<StoryItem> stories) async {
+    final String? myId = _socialService.currentUser?.id;
+    if (myId == null) return <StoryItem>[];
+
+    final followed = await _socialService.getFollowing(myId);
+    return followed
+        .map(
+          (user) => StoryItem(
+            label: user.name,
+            authorId: user.userId,
+            isViewed: StorySeenStore.isSeen(
+              authorId: user.userId,
+              label: user.name,
+            ),
+          ),
+        )
+        .toList();
+  }
 
   void _openNotifications() {
     Navigator.of(
@@ -52,25 +134,34 @@ class _CommunityPageState extends State<CommunityPage> {
   }
 
   Future<void> _openStory(int index) async {
+    if (index < 0 || index >= _stories.length) return;
     final StoryItem story = _stories[index];
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: story)),
     );
-    if (!mounted || story.isViewed) return;
+    StorySeenStore.markSeen(authorId: story.authorId, label: story.label);
+    if (!mounted) return;
     setState(() {
       _stories[index] = story.copyWith(isViewed: true);
     });
   }
 
-  Future<void> _openInlineStory(String label) async {
+  Future<void> _openInlineStory(StoryItem person) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+        builder: (_) => StoryViewerPage(story: person),
       ),
     );
+    StorySeenStore.markSeen(authorId: person.authorId, label: person.label);
     if (!mounted) return;
     setState(() {
-      _viewedInlineProfiles.add(label);
+      _communityPeople = _communityPeople
+          .map(
+            (StoryItem item) => item.authorId == person.authorId
+                ? item.copyWith(isViewed: true)
+                : item,
+          )
+          .toList();
     });
   }
 
@@ -85,11 +176,12 @@ class _CommunityPageState extends State<CommunityPage> {
               onSearchTap: _openSearch,
             ),
             const SizedBox(height: 8),
-            Stories(
-              stories: _stories,
-              onStoryTap: _openStory,
-              onMineAddTap: _openCreateShort,
-            ),
+            if (_stories.isNotEmpty)
+              Stories(
+                stories: _stories,
+                onStoryTap: _openStory,
+                onMineAddTap: _openCreateShort,
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
               child: Row(
@@ -120,49 +212,13 @@ class _CommunityPageState extends State<CommunityPage> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-              child: Row(
-                children: [
-                  _InlineStoryAvatar(
-                    label: 'TiffanyPhylicia',
-                    viewed: _viewedInlineProfiles.contains('TiffanyPhylicia'),
-                    onTap: () => _openInlineStory('TiffanyPhylicia'),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const ChatBoxPage(),
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'TiffanyPhylicia',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ),
-                          Icon(
-                            Icons.local_fire_department,
-                            color: Color(0xFFFFA84D),
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _friendMode
+                      ? _buildPeopleList()
+                      : _buildCommunityFeed(),
             ),
-            const Spacer(),
           ],
         ),
       ),
@@ -175,6 +231,106 @@ class _CommunityPageState extends State<CommunityPage> {
         ).push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage())),
         onCommunityTap: () {},
         onProfileTap: () => AppRoutes.goProfile(context),
+      ),
+    );
+  }
+
+  Widget _buildPeopleList() {
+    if (_communityPeople.isEmpty) {
+      return const Center(
+        child: Text(
+          'Belum ada user yang kamu follow.',
+          style: TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+
+    final Set<String> activeStoryUserIds = _stories
+        .map((StoryItem s) => s.authorId ?? '')
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      itemCount: _communityPeople.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (BuildContext context, int index) {
+        final StoryItem person = _communityPeople[index];
+        final String label = person.label;
+        final bool hasStory =
+            person.authorId != null && activeStoryUserIds.contains(person.authorId);
+        return Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF13151A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF24262E)),
+          ),
+          child: Row(
+            children: [
+              _InlineStoryAvatar(
+                label: label,
+                viewed: StorySeenStore.isSeen(
+                  authorId: person.authorId,
+                  label: label,
+                ),
+                hasStory: hasStory,
+                onTap: hasStory ? () => _openInlineStory(person) : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+              InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ChatProfileInfoPage(
+                      name: label,
+                      userId: person.authorId,
+                    ),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.chat_bubble_outline,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCommunityFeed() {
+    if (_posts.isEmpty) {
+      return const Center(
+        child: Text(
+          'Belum ada postingan komunitas.',
+          style: TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadCommunity,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 10),
+        itemCount: _posts.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (BuildContext context, int index) {
+          return FeedPost(post: _posts[index]);
+        },
       ),
     );
   }
@@ -199,11 +355,13 @@ class _InlineStoryAvatar extends StatelessWidget {
   const _InlineStoryAvatar({
     required this.label,
     required this.viewed,
+    required this.hasStory,
     this.onTap,
   });
 
   final String label;
   final bool viewed;
+  final bool hasStory;
   final VoidCallback? onTap;
 
   @override
@@ -226,7 +384,8 @@ class _InlineStoryAvatar extends StatelessWidget {
         height: 28,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: ringGradient,
+          gradient: hasStory ? ringGradient : null,
+          color: hasStory ? null : const Color(0xFF2D313B),
         ),
         child: Center(
           child: Container(

@@ -23,6 +23,12 @@ class CreatePostPage extends StatefulWidget {
 
 class _CreatePostPageState extends State<CreatePostPage> {
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _jobTitleController = TextEditingController();
+  final TextEditingController _jobLocationController = TextEditingController();
+  final TextEditingController _jobDomicileController = TextEditingController();
+  final TextEditingController _jobRequirementsController =
+      TextEditingController();
+  final TextEditingController _jobDeadlineController = TextEditingController();
   final PostService _postService = PostService();
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -36,6 +42,11 @@ class _CreatePostPageState extends State<CreatePostPage> {
   @override
   void dispose() {
     _descriptionController.dispose();
+    _jobTitleController.dispose();
+    _jobLocationController.dispose();
+    _jobDomicileController.dispose();
+    _jobRequirementsController.dispose();
+    _jobDeadlineController.dispose();
     super.dispose();
   }
 
@@ -84,12 +95,24 @@ class _CreatePostPageState extends State<CreatePostPage> {
         hideLikeAndViewCount: hideLikeAndViewCount,
         turnOffCommenting: turnOffCommenting,
         images: _selectedImages,
+        jobTitle: _jobTitleController.text.trim(),
+        jobLocation: _jobLocationController.text.trim(),
+        jobDomicile: _jobDomicileController.text.trim(),
+        jobRequirements: _jobRequirementsController.text.trim(),
+        jobDeadline: DateTime.tryParse(_jobDeadlineController.text.trim()),
       );
       if (!mounted) return;
       _showMessage('Postingan berhasil dipublikasikan.');
       Navigator.of(context).pop();
     } catch (error) {
-      _showMessage('Gagal upload postingan: $error');
+      final String raw = error.toString().toLowerCase();
+      if (raw.contains('bucket not found')) {
+        _showMessage(
+          'Bucket Storage `post-images` belum ada. Buat dulu bucket di Supabase, lalu coba upload lagi.',
+        );
+      } else {
+        _showMessage('Gagal upload postingan: $error');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -130,11 +153,11 @@ class _CreatePostPageState extends State<CreatePostPage> {
               onNotificationTap: _openNotifications,
               onSearchTap: _openSearch,
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: Row(
                 children: [
-                  Text(
+                  const Text(
                     'Postingan Baru',
                     style: TextStyle(
                       color: Colors.white,
@@ -143,8 +166,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
                       fontStyle: FontStyle.italic,
                     ),
                   ),
-                  Spacer(),
-                  Icon(Icons.add, color: Colors.white, size: 30),
+                  const Spacer(),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _isPosting ? null : _pickImages,
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.add, color: Colors.white, size: 30),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -225,17 +255,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
                               );
                             },
                           ),
-                          Positioned(
-                            right: 10,
-                            bottom: 10,
-                            child: AppButton(
-                              label: 'Tambah Foto',
-                              onTap: _isPosting ? null : _pickImages,
-                              expand: false,
-                              height: 30,
-                              fontSize: 11,
-                            ),
-                          ),
                         ],
                       ),
               ),
@@ -277,6 +296,43 @@ class _CreatePostPageState extends State<CreatePostPage> {
                 ],
               ),
             ),
+            if (selectedCategory == 'Loker')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                child: Column(
+                  children: [
+                    _DescriptionField(
+                      controller: _jobTitleController,
+                      hint: 'Nama loker / posisi',
+                      height: 52,
+                    ),
+                    const SizedBox(height: 8),
+                    _DescriptionField(
+                      controller: _jobLocationController,
+                      hint: 'Lokasi kerja (contoh: Jakarta Selatan)',
+                      height: 52,
+                    ),
+                    const SizedBox(height: 8),
+                    _DescriptionField(
+                      controller: _jobDomicileController,
+                      hint: 'Domisili kandidat (contoh: Jabodetabek)',
+                      height: 52,
+                    ),
+                    const SizedBox(height: 8),
+                    _DescriptionField(
+                      controller: _jobDeadlineController,
+                      hint: 'Deadline (YYYY-MM-DD)',
+                      height: 52,
+                    ),
+                    const SizedBox(height: 8),
+                    _DescriptionField(
+                      controller: _jobRequirementsController,
+                      hint: 'Kriteria kandidat',
+                      height: 90,
+                    ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: _DescriptionField(controller: _descriptionController),
@@ -431,14 +487,20 @@ class _CreateDropdownField extends StatelessWidget {
 }
 
 class _DescriptionField extends StatelessWidget {
-  const _DescriptionField({required this.controller});
+  const _DescriptionField({
+    required this.controller,
+    this.hint = 'Deskripsi',
+    this.height = 90,
+  });
 
   final TextEditingController controller;
+  final String hint;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 90,
+      height: height,
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
@@ -448,9 +510,9 @@ class _DescriptionField extends StatelessWidget {
         controller: controller,
         maxLines: null,
         style: const TextStyle(color: Colors.white, fontSize: 12),
-        decoration: const InputDecoration(
-          hintText: 'Deskripsi',
-          hintStyle: TextStyle(color: Colors.white70, fontSize: 12),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.white70, fontSize: 12),
           border: InputBorder.none,
           isCollapsed: true,
         ),

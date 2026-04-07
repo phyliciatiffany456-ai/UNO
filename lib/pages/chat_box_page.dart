@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../models/chat_store.dart';
-import '../models/story_item.dart';
 import '../navigation/app_routes.dart';
+import '../services/chat_service.dart';
 import '../widgets/bottom_nav.dart';
-import '../widgets/story_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'chat_profile_info_page.dart';
 import 'create_post_page.dart';
 import 'notifications_page.dart';
 import 'search_page.dart';
-import 'story_viewer_page.dart';
 
 class ChatBoxPage extends StatefulWidget {
   const ChatBoxPage({super.key});
@@ -20,13 +17,32 @@ class ChatBoxPage extends StatefulWidget {
 }
 
 class _ChatBoxPageState extends State<ChatBoxPage> {
+  final ChatService _chatService = ChatService();
   final TextEditingController _controller = TextEditingController();
-  bool _viewedChatStory = false;
+  String? _roomId;
+  String? _roomError;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_refreshInputState);
+    _setupRoom();
+  }
+
+  Future<void> _setupRoom() async {
+    try {
+      final String roomId = await _chatService.ensureGlobalCommunityRoom();
+      if (!mounted) return;
+      setState(() {
+        _roomId = roomId;
+        _roomError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _roomError = e.toString();
+      });
+    }
   }
 
   @override
@@ -55,23 +71,12 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
   }
 
   void _sendMessage() {
+    final String? roomId = _roomId;
+    if (roomId == null) return;
     final String message = _controller.text.trim();
     if (message.isEmpty) return;
-    ChatStore.add(message);
+    _chatService.sendMessage(roomId: roomId, content: message);
     _controller.clear();
-  }
-
-  Future<void> _openChatProfileStory() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            const StoryViewerPage(story: StoryItem(label: 'TiffanyPhylicia')),
-      ),
-    );
-    if (!mounted) return;
-    setState(() {
-      _viewedChatStory = true;
-    });
   }
 
   @override
@@ -98,11 +103,16 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                   children: [
                     Row(
                       children: [
-                        _ChatProfileAvatar(
-                          viewed: _viewedChatStory,
-                          onTap: _openChatProfileStory,
+                        const CircleAvatar(
+                          radius: 17,
+                          backgroundColor: Color(0xFFE5E7EB),
+                          child: Icon(
+                            Icons.groups_2_outlined,
+                            color: Color(0xFF121417),
+                            size: 18,
+                          ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Expanded(
                           child: InkWell(
                             borderRadius: BorderRadius.circular(6),
@@ -110,18 +120,18 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
                                   builder: (_) => const ChatProfileInfoPage(
-                                    name: 'TiffanyPhylicia',
-                                    role: 'UI/UX Designer',
+                                    name: 'Komunitas UNO',
+                                    role: 'Group Chat',
                                     bio:
-                                        'Suka bangun produk digital dan kolaborasi bareng tim lintas divisi.',
+                                        'Ruang obrolan komunitas UNO.',
                                   ),
                                 ),
                               );
                             },
-                            child: const Padding(
+                            child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 2),
                               child: Text(
-                                'TiffanyPhylicia',
+                                'Komunitas UNO',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 13,
@@ -142,28 +152,55 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                     const SizedBox(height: 14),
                     SizedBox(
                       height: 280,
-                      child: ValueListenableBuilder<List<ChatMessage>>(
-                        valueListenable: ChatStore.messages,
-                        builder: (
-                          BuildContext context,
-                          List<ChatMessage> messages,
-                          Widget? child,
-                        ) {
-                          return ListView.builder(
-                            itemCount: messages.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              final ChatMessage message = messages[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: _bubble(
-                                  alignRight: message.fromMe,
-                                  label: message.text,
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
+                      child: _roomId == null
+                          ? Center(
+                              child: _roomError == null
+                                  ? const CircularProgressIndicator()
+                                  : Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Text(
+                                          'Chat belum siap.\nCek schema chat di Supabase.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        TextButton(
+                                          onPressed: _setupRoom,
+                                          child: const Text('Coba lagi'),
+                                        ),
+                                      ],
+                                    ),
+                            )
+                          : StreamBuilder<List<ChatMessageItem>>(
+                              stream: _chatService.watchMessages(_roomId!),
+                              builder: (
+                                BuildContext context,
+                                AsyncSnapshot<List<ChatMessageItem>> snapshot,
+                              ) {
+                                final List<ChatMessageItem> messages =
+                                    snapshot.data ?? <ChatMessageItem>[];
+                                final String myId =
+                                    _chatService.currentUser?.id ?? '';
+                                return ListView.builder(
+                                  itemCount: messages.length,
+                                  itemBuilder: (BuildContext context, int index) {
+                                    final ChatMessageItem message =
+                                        messages[index];
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: _bubble(
+                                        alignRight: message.senderId == myId,
+                                        label: message.content,
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
@@ -199,7 +236,7 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                   const SizedBox(width: 6),
                   InkWell(
                     borderRadius: BorderRadius.circular(22),
-                    onTap: _hasText ? _sendMessage : null,
+                    onTap: (_hasText && _roomId != null) ? _sendMessage : null,
                     child: Container(
                       width: 42,
                       height: 42,
@@ -259,17 +296,5 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
         ),
       ),
     );
-  }
-}
-
-class _ChatProfileAvatar extends StatelessWidget {
-  const _ChatProfileAvatar({required this.viewed, required this.onTap});
-
-  final bool viewed;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return StoryRingProfileAvatar(size: 34, viewed: viewed, onTap: onTap);
   }
 }

@@ -36,14 +36,11 @@ class AuthPageShell extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'uno',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFFFF6A2D),
-                        fontSize: 48,
-                        fontWeight: FontWeight.w900,
-                        fontStyle: FontStyle.italic,
+                    const Center(
+                      child: Image(
+                        image: AssetImage('lib/gambar/O.png'),
+                        height: 72,
+                        fit: BoxFit.contain,
                       ),
                     ),
                     const SizedBox(height: 8),

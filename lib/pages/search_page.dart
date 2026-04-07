@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/post_item.dart';
 import '../navigation/app_routes.dart';
-import '../models/story_item.dart';
+import '../services/post_service.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
 import 'notifications_page.dart';
-import 'story_viewer_page.dart';
+import 'post_zoom_page.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -17,11 +19,65 @@ class SearchPage extends StatefulWidget {
 
 class _SearchPageState extends State<SearchPage> {
   final TextEditingController _controller = TextEditingController();
+  final PostService _postService = PostService();
+  List<PostItem> _allPosts = <PostItem>[];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onQueryChanged);
+    _loadSearchData();
+  }
 
   @override
   void dispose() {
+    _controller.removeListener(_onQueryChanged);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onQueryChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _loadSearchData() async {
+    final User? user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      AppRoutes.goLogin(context);
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final List<PostItem> posts = await _postService.fetchFeed();
+      if (!mounted) return;
+      setState(() {
+        _allPosts = posts;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  List<PostItem> get _filteredPosts {
+    final String query = _controller.text.trim().toLowerCase();
+    if (query.isEmpty) return _allPosts;
+
+    return _allPosts.where((PostItem post) {
+      return post.name.toLowerCase().contains(query) ||
+          post.role.toLowerCase().contains(query) ||
+          post.content.toLowerCase().contains(query);
+    }).toList();
   }
 
   void _openCreate(BuildContext context) {
@@ -92,19 +148,47 @@ class _SearchPageState extends State<SearchPage> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _SearchTile(
-                      username: 'TiffanyPhylicia',
-                      text: 'UI/UX Designer • Open to collaboration',
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const StoryViewerPage(
-                              story: StoryItem(label: 'TiffanyPhylicia'),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    if (_loading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else if (_filteredPosts.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Text(
+                          'Belum ada hasil untuk pencarian ini.',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 420),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _filteredPosts.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (BuildContext context, int index) {
+                            final PostItem post = _filteredPosts[index];
+                            return _SearchTile(
+                              username: post.name,
+                              text: post.role,
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => PostZoomPage(post: post),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),

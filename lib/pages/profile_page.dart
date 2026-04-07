@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../navigation/app_routes.dart';
-import '../models/profile_store.dart';
+import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../models/story_seen_store.dart';
+import '../navigation/app_routes.dart';
+import '../services/post_service.dart';
+import '../services/profile_service.dart';
+import '../services/social_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/expandable_text.dart';
@@ -27,7 +32,81 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  final PostService _postService = PostService();
+  final ProfileService _profileService = ProfileService();
+  final SocialService _socialService = SocialService();
+
   bool _viewedProfileStory = false;
+  bool _loading = true;
+  List<PostItem> _myPosts = <PostItem>[];
+  String _displayName = 'User';
+  String _bio = 'Belum ada bio.';
+  String _role = 'UNO Member';
+  int _followerCount = 0;
+  int _followingCount = 0;
+  bool _hasActiveStory = false;
+  String? _avatarUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final User? user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      AppRoutes.goLogin(context);
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final ProfileRecord profile = await _profileService.fetchMyProfile();
+      final List<PostItem> posts = await _postService.fetchFeed();
+      final Map<String, int> followStats = await _socialService.getFollowStats(
+        user.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _displayName = profile.fullName;
+        _bio = profile.bio;
+        _role = profile.role;
+        _avatarUrl = profile.avatarUrl;
+        _followerCount = followStats['followers'] ?? 0;
+        _followingCount = followStats['following'] ?? 0;
+        _myPosts = posts.where((PostItem p) => p.authorId == user.id).toList();
+        final DateTime threshold = DateTime.now().subtract(
+          const Duration(days: 1),
+        );
+        _hasActiveStory = _myPosts.any(
+          (PostItem p) =>
+              p.type == PostType.short &&
+              p.createdAt != null &&
+              p.createdAt!.isAfter(threshold),
+        );
+        _viewedProfileStory = StorySeenStore.isSeen(
+          authorId: user.id,
+          label: _displayName,
+        );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memuat profil dari database.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
 
   void _openNotifications(BuildContext context) {
     Navigator.of(
@@ -48,17 +127,19 @@ class _ProfilePageState extends State<ProfilePage> {
 
     return Scaffold(
       body: SafeArea(
-        child: ValueListenableBuilder<ProfileData>(
-          valueListenable: ProfileStore.data,
-          builder: (BuildContext context, ProfileData profile, Widget? child) {
-            return Column(
-              children: [
-                TopBar(
-                  onNotificationTap: () => _openNotifications(context),
-                  onSearchTap: () => _openSearch(context),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
+        child: Column(
+          children: [
+            TopBar(
+              onNotificationTap: () => _openNotifications(context),
+              onSearchTap: () => _openSearch(context),
+            ),
+            const SizedBox(height: 8),
+            if (_loading)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _loadProfile,
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
                     children: [
@@ -66,9 +147,13 @@ class _ProfilePageState extends State<ProfilePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ProfileRingAvatar(
-                            label: profile.name,
+                            label: _displayName,
                             viewed: _viewedProfileStory,
-                            onTap: () => _openStory(context, profile.name),
+                            hasStory: _hasActiveStory,
+                            imageUrl: _avatarUrl,
+                            onTap: _hasActiveStory
+                                ? () => _openStory(context, _displayName)
+                                : null,
                             showAdd: true,
                             onAddTap: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
@@ -82,7 +167,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  profile.name,
+                                  _displayName,
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 14,
@@ -90,25 +175,33 @@ class _ProfilePageState extends State<ProfilePage> {
                                     fontStyle: FontStyle.italic,
                                   ),
                                 ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _role,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
                                 const SizedBox(height: 8),
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const _ProfileStat(
+                                    _ProfileStat(
                                       label: 'Postingan',
-                                      value: '68',
+                                      value: '${_myPosts.length}',
                                     ),
                                     _ProfileStat(
                                       label: 'Pengikut',
-                                      value: '9.8K',
+                                      value: '$_followerCount',
                                       onTap: () => _openConnections(
                                         ConnectionTab.followers,
                                       ),
                                     ),
                                     _ProfileStat(
                                       label: 'Mengikuti',
-                                      value: '201',
+                                      value: '$_followingCount',
                                       onTap: () => _openConnections(
                                         ConnectionTab.following,
                                       ),
@@ -124,7 +217,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: ExpandableText(
-                          text: profile.bio,
+                          text: _bio,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
@@ -139,20 +232,24 @@ class _ProfilePageState extends State<ProfilePage> {
                         children: [
                           _profileAction(
                             'Dasbor',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const ProfileDashboardPage(),
-                              ),
-                            ),
+                            onTap: () => Navigator.of(context)
+                                .push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const ProfileDashboardPage(),
+                                  ),
+                                )
+                                .then((_) => _loadProfile()),
                           ),
                           const SizedBox(width: 6),
                           _profileAction(
                             'Edit Profil',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const ProfileEditPage(),
-                              ),
-                            ),
+                            onTap: () => Navigator.of(context)
+                                .push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const ProfileEditPage(),
+                                  ),
+                                )
+                                .then((_) => _loadProfile()),
                           ),
                           const SizedBox(width: 6),
                           _profileAction(
@@ -174,11 +271,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           Expanded(
                             child: _TabIcon(
                               icon: Icons.video_collection_outlined,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const PostZoomPage(),
-                                ),
-                              ),
+                              onTap: () {},
                             ),
                           ),
                           Expanded(
@@ -197,30 +290,63 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: List<Widget>.generate(12, (int index) {
-                          return InkWell(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const PostZoomPage(),
+                      if (_myPosts.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              'Belum ada postingan dari akun ini.',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: _myPosts.map((PostItem post) {
+                            final bool hasImage = post.imageUrls.isNotEmpty;
+                            return InkWell(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => PostZoomPage(post: post),
+                                ),
                               ),
-                            ),
-                            child: Container(
-                              width: tileWidth,
-                              height: tileWidth * 1.2,
-                              color: const Color(0xFFC8C8C8),
-                            ),
-                          );
-                        }),
-                      ),
+                              child: SizedBox(
+                                width: tileWidth,
+                                height: tileWidth * 1.2,
+                                child: hasImage
+                                    ? Image.network(
+                                        post.imageUrls.first,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            const ColoredBox(
+                                          color: Color(0xFFC8C8C8),
+                                        ),
+                                      )
+                                    : Container(
+                                        color: const Color(0xFF20242B),
+                                        padding: const EdgeInsets.all(8),
+                                        alignment: Alignment.topLeft,
+                                        child: Text(
+                                          post.content,
+                                          maxLines: 5,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                     ],
                   ),
                 ),
-              ],
-            );
-          },
+              ),
+          ],
         ),
       ),
       bottomNavigationBar: BottomNav(
@@ -237,11 +363,14 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _openStory(BuildContext context, String label) async {
+    final String? myUserId = Supabase.instance.client.auth.currentUser?.id;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+        builder: (_) =>
+            StoryViewerPage(story: StoryItem(label: label, authorId: myUserId)),
       ),
     );
+    StorySeenStore.markSeen(authorId: myUserId, label: label);
     if (!mounted) return;
     setState(() {
       _viewedProfileStory = true;
@@ -300,11 +429,13 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _openConnections(ConnectionTab tab) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProfileConnectionsPage(initialTab: tab),
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => ProfileConnectionsPage(initialTab: tab),
+          ),
+        )
+        .then((_) => _loadProfile());
   }
 
   Widget _profileAction(String label, {required VoidCallback onTap}) {

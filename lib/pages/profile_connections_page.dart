@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/social_service.dart';
 
 enum ConnectionTab { followers, following }
 
@@ -12,34 +15,51 @@ class ProfileConnectionsPage extends StatefulWidget {
 }
 
 class _ProfileConnectionsPageState extends State<ProfileConnectionsPage> {
+  final SocialService _socialService = SocialService();
   late ConnectionTab _activeTab;
-
-  final List<String> _followers = const <String>[
-    'Rani HRD',
-    'Fajar Dev',
-    'Nadia PM',
-    'Arga UX',
-    'Dita Data',
-  ];
-
-  final List<String> _following = const <String>[
-    'TiffanyPhylicia',
-    'NexaTech Careers',
-    'Agus Backend',
-    'Riko Frontend',
-    'Salsa Recruiter',
-  ];
+  List<UserMiniProfile> _followers = <UserMiniProfile>[];
+  List<UserMiniProfile> _following = <UserMiniProfile>[];
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     _activeTab = widget.initialTab;
+    _loadConnections();
+  }
+
+  Future<void> _loadConnections() async {
+    final User? user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final List<UserMiniProfile> followers = await _socialService.getFollowers(
+        user.id,
+      );
+      final List<UserMiniProfile> following = await _socialService.getFollowing(
+        user.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _followers = followers;
+        _following = following;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final bool showFollowers = _activeTab == ConnectionTab.followers;
-    final List<String> data = showFollowers ? _followers : _following;
+    final List<UserMiniProfile> data = showFollowers ? _followers : _following;
 
     return Scaffold(
       appBar: AppBar(
@@ -78,51 +98,75 @@ class _ProfileConnectionsPageState extends State<ProfileConnectionsPage> {
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              itemCount: data.length,
-              separatorBuilder: (BuildContext context, int index) =>
-                  const SizedBox(height: 8),
-              itemBuilder: (BuildContext context, int index) {
-                return Container(
-                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF13151A),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF24262E)),
-                  ),
-                  child: Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 15,
-                        backgroundColor: Color(0xFFE5E7EB),
-                        child: Icon(
-                          Icons.person,
-                          size: 15,
-                          color: Color(0xFF121417),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : data.isEmpty
+                ? Center(
+                    child: Text(
+                      showFollowers
+                          ? 'Belum ada pengikut.'
+                          : 'Belum mengikuti siapa pun.',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    itemCount: data.length,
+                    separatorBuilder: (BuildContext context, int index) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (BuildContext context, int index) {
+                      final UserMiniProfile item = data[index];
+                      return Container(
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF13151A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF24262E)),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          data[index],
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        child: Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 15,
+                              backgroundColor: Color(0xFFE5E7EB),
+                              child: Icon(
+                                Icons.person,
+                                size: 15,
+                                color: Color(0xFF121417),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    item.role,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
+                          ],
                         ),
-                      ),
-                      const Icon(
-                        Icons.chevron_right,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                    ],
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/post_item.dart';
+import '../models/story_seen_store.dart';
 import '../pages/chat_profile_info_page.dart';
 import '../models/story_item.dart';
 import '../pages/job_apply_page.dart';
 import '../pages/story_viewer_page.dart';
+import '../services/social_service.dart';
 import 'app_button.dart';
 import 'expandable_text.dart';
 import 'pop_icon_button.dart';
@@ -19,6 +21,8 @@ class FeedPost extends StatefulWidget {
 }
 
 class _FeedPostState extends State<FeedPost> {
+  final SocialService _socialService = SocialService();
+
   late bool _isFollowed;
   late bool _isStoryViewed;
   late int _likeCount;
@@ -34,6 +38,7 @@ class _FeedPostState extends State<FeedPost> {
       MaterialPageRoute<void>(
         builder: (_) => ChatProfileInfoPage(
           name: post.name,
+          userId: post.authorId,
           role: post.role,
           bio: _ownerBio(post),
         ),
@@ -58,10 +63,15 @@ class _FeedPostState extends State<FeedPost> {
   void initState() {
     super.initState();
     _isFollowed = widget.post.isFollowed;
-    _isStoryViewed = false;
-    _likeCount = 24;
-    _commentCount = 3;
-    _shareCount = 1;
+    _isStoryViewed = StorySeenStore.isSeen(
+      authorId: widget.post.authorId,
+      label: widget.post.name,
+    );
+    _likeCount = widget.post.likeCount;
+    _commentCount = widget.post.commentCount;
+    _shareCount = widget.post.shareCount;
+    _liked = widget.post.isLiked;
+    _shared = widget.post.isShared;
   }
 
   @override
@@ -128,14 +138,11 @@ class _FeedPostState extends State<FeedPost> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                if (!_isFollowed)
+                if (!_isFollowed &&
+                    _socialService.currentUser?.id != post.authorId)
                   InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      setState(() {
-                        _isFollowed = true;
-                      });
-                    },
+                    onTap: _followUser,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -255,12 +262,7 @@ class _FeedPostState extends State<FeedPost> {
                   icon: _liked ? Icons.favorite : Icons.favorite_border,
                   color: _liked ? const Color(0xFFFF3B30) : Colors.white,
                   count: _likeCount,
-                  onTap: () {
-                    setState(() {
-                      _liked = !_liked;
-                      _likeCount += _liked ? 1 : -1;
-                    });
-                  },
+                  onTap: _toggleLike,
                 ),
                 const SizedBox(width: 12),
                 _EngagementButton(
@@ -269,24 +271,14 @@ class _FeedPostState extends State<FeedPost> {
                       : Icons.mode_comment_outlined,
                   color: _commented ? const Color(0xFF7DD3FC) : Colors.white,
                   count: _commentCount,
-                  onTap: () {
-                    setState(() {
-                      _commented = !_commented;
-                      _commentCount += _commented ? 1 : -1;
-                    });
-                  },
+                  onTap: _addComment,
                 ),
                 const SizedBox(width: 12),
                 _EngagementButton(
                   icon: _shared ? Icons.send : Icons.send_outlined,
                   color: _shared ? const Color(0xFF93C5FD) : Colors.white,
                   count: _shareCount,
-                  onTap: () {
-                    setState(() {
-                      _shared = !_shared;
-                      _shareCount += _shared ? 1 : -1;
-                    });
-                  },
+                  onTap: _toggleShare,
                 ),
                 const Spacer(),
                 const PopIconButton(
@@ -330,7 +322,7 @@ class _FeedPostState extends State<FeedPost> {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                builder: (_) => JobApplyPage(company: post.name),
+                                builder: (_) => JobApplyPage(post: post),
                               ),
                             );
                           },
@@ -357,6 +349,187 @@ class _FeedPostState extends State<FeedPost> {
         ],
       ),
     );
+  }
+
+  Future<void> _followUser() async {
+    try {
+      await _socialService.followUser(widget.post.authorId);
+      if (!mounted) return;
+      setState(() {
+        _isFollowed = true;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _toggleLike() async {
+    final bool next = !_liked;
+    setState(() {
+      _liked = next;
+      _likeCount = (_likeCount + (next ? 1 : -1)).clamp(0, 1000000).toInt();
+    });
+    try {
+      await _socialService.toggleLike(widget.post.id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _liked = !next;
+        _likeCount = (_likeCount + (next ? -1 : 1)).clamp(0, 1000000).toInt();
+      });
+    }
+  }
+
+  Future<void> _toggleShare() async {
+    final bool next = !_shared;
+    setState(() {
+      _shared = next;
+      _shareCount =
+          (_shareCount + (next ? 1 : -1)).clamp(0, 1000000).toInt();
+    });
+    try {
+      await _socialService.toggleShare(widget.post.id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _shared = !next;
+        _shareCount =
+            (_shareCount + (next ? -1 : 1)).clamp(0, 1000000).toInt();
+      });
+    }
+  }
+
+  Future<void> _addComment() async {
+    final TextEditingController controller = TextEditingController();
+    List<PostCommentItem> comments = await _socialService.fetchComments(
+      widget.post.id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _commentCount = comments.length;
+      _commented = comments.isNotEmpty;
+    });
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF13151A),
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            Future<void> submitComment() async {
+              final String text = controller.text.trim();
+              if (text.isEmpty) return;
+              controller.clear();
+              try {
+                await _socialService.addComment(
+                  postId: widget.post.id,
+                  content: text,
+                );
+                comments = await _socialService.fetchComments(widget.post.id);
+                setModalState(() {});
+                if (!mounted) return;
+                setState(() {
+                  _commented = true;
+                  _commentCount = comments.length;
+                });
+              } catch (_) {}
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 12,
+                right: 12,
+                top: 10,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+              ),
+              child: SizedBox(
+                height: 420,
+                child: Column(
+                  children: [
+                    const Text(
+                      'Komentar',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: comments.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Belum ada komentar.',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: comments.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (BuildContext context, int index) {
+                                final PostCommentItem comment = comments[index];
+                                return Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0E1014),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(0xFF2D313B),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        comment.userName,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        comment.content,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              hintText: 'Tulis komentar...',
+                              hintStyle: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: submitComment,
+                          icon: const Icon(Icons.send, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
   }
 
   String _typeLabel(PostType type) {
@@ -420,10 +593,15 @@ class _FeedPostState extends State<FeedPost> {
               await Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => StoryViewerPage(
-                    story: StoryItem(label: post.name, isViewed: false),
+                    story: StoryItem(
+                      label: post.name,
+                      authorId: post.authorId,
+                      isViewed: _isStoryViewed,
+                    ),
                   ),
                 ),
               );
+              StorySeenStore.markSeen(authorId: post.authorId, label: post.name);
               if (!mounted) return;
               setState(() {
                 _isStoryViewed = true;

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../navigation/app_routes.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/auth_ui.dart';
+import 'login_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -65,12 +65,33 @@ class _RegisterPageState extends State<RegisterPage> {
         fullName: fullName,
       );
       if (!mounted) return;
-      _showMessage(
-        'Registrasi berhasil. Jika verifikasi email aktif, cek inbox kamu lalu login.',
-      );
-      AppRoutes.goLogin(context);
+      _showMessage('Registrasi berhasil. Silakan login.');
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+        );
+      }
     } on AuthException catch (error) {
-      _showMessage(error.message);
+      final String message = error.message.toLowerCase();
+      final bool isEmailRateLimited =
+          message.contains('email rate limit exceeded') ||
+          message.contains('rate limit');
+      if (isEmailRateLimited) {
+        _showMessage(
+          'Pendaftaran dibatasi sementara. Coba login dulu; jika belum bisa, tunggu sebentar lalu ulangi.',
+        );
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+          );
+        }
+      } else {
+        _showMessage(error.message);
+      }
     } catch (_) {
       _showMessage('Register gagal. Coba lagi sebentar.');
     } finally {
@@ -95,7 +116,15 @@ class _RegisterPageState extends State<RegisterPage> {
       subtitle: 'Bikin akun baru untuk mulai bangun relasi profesionalmu.',
       bottomPrompt: 'Sudah punya akun?',
       bottomActionText: 'Masuk',
-      onBottomActionTap: () => AppRoutes.goLogin(context),
+      onBottomActionTap: () {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+          return;
+        }
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+        );
+      },
       form: AuthCard(
         title: 'Register',
         children: [
@@ -108,7 +137,7 @@ class _RegisterPageState extends State<RegisterPage> {
           AuthInputField(
             label: 'Email',
             controller: _emailController,
-            hintText: 'contoh: tiffany@uno.app',
+            hintText: 'contoh: nama@email.com',
             keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 10),

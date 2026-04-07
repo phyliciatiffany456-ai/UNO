@@ -12,6 +12,16 @@ class PostItem {
     this.canApply = false,
     this.isFollowed = true,
     this.hasStory = true,
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.shareCount = 0,
+    this.isLiked = false,
+    this.isShared = false,
+    this.jobTitle,
+    this.jobLocation,
+    this.jobDomicile,
+    this.jobRequirements,
+    this.jobDeadline,
     this.createdAt,
   });
 
@@ -25,6 +35,16 @@ class PostItem {
   final bool canApply;
   final bool isFollowed;
   final bool hasStory;
+  final int likeCount;
+  final int commentCount;
+  final int shareCount;
+  final bool isLiked;
+  final bool isShared;
+  final String? jobTitle;
+  final String? jobLocation;
+  final String? jobDomicile;
+  final String? jobRequirements;
+  final DateTime? jobDeadline;
   final DateTime? createdAt;
 
   int get imageCount => imageUrls.length;

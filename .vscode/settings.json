@@ -1,0 +1,6 @@
+{
+  "dart.flutterRunAdditionalArgs": [
+    "--dart-define=SUPABASE_URL=https://lbgxhbwlshqxedjxtqej.supabase.co",
+    "--dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_3h6L1IMFsH5gSYSpvGlrOQ_EFYhfw-r"
+  ]
+}

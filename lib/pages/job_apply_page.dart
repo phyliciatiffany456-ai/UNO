@@ -1,20 +1,25 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/cv_store.dart';
+import '../models/post_item.dart';
+import '../services/job_application_service.dart';
 import '../widgets/app_button.dart';
-import 'profile_edit_page.dart';
 
 class JobApplyPage extends StatefulWidget {
-  const JobApplyPage({super.key, required this.company});
+  const JobApplyPage({super.key, required this.post});
 
-  final String company;
+  final PostItem post;
 
   @override
   State<JobApplyPage> createState() => _JobApplyPageState();
 }
 
 class _JobApplyPageState extends State<JobApplyPage> {
+  final JobApplicationService _applicationService = JobApplicationService();
+
   bool _submitted = false;
+  bool _uploadingCv = false;
   int _visibleStatusCount = 0;
   bool _showStatusTitle = false;
 
@@ -24,13 +29,79 @@ class _JobApplyPageState extends State<JobApplyPage> {
     'Waiting for review...',
   ];
 
+  Future<void> _pickAndUploadCv() async {
+    setState(() {
+      _uploadingCv = true;
+    });
+
+    try {
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: <String>['pdf', 'doc', 'docx'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+      final PlatformFile file = result.files.first;
+      final CvUploadResult uploaded = await _applicationService.uploadCv(file);
+      CvStore.setCv(
+        name: uploaded.fileName,
+        path: uploaded.storagePath,
+        url: uploaded.publicUrl,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('CV berhasil di-upload: ${uploaded.fileName}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal upload CV: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingCv = false;
+        });
+      }
+    }
+  }
+
   Future<void> _submitCv() async {
-    if (!CvStore.hasCv) {
+    final String? fileName = CvStore.fileName.value;
+    final String? filePath = CvStore.filePath.value;
+    final String? fileUrl = CvStore.fileUrl.value;
+
+    if (fileName == null || filePath == null || fileUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('CV belum ada. Upload dulu di Edit Profil.'),
+          content: Text('CV belum ada. Upload dulu.'),
           duration: Duration(seconds: 2),
         ),
+      );
+      return;
+    }
+
+    final CvUploadResult cv = CvUploadResult(
+      fileName: fileName,
+      storagePath: filePath,
+      publicUrl: fileUrl,
+    );
+
+    try {
+      await _applicationService.submitApplication(
+        jobPostId: widget.post.id,
+        cv: cv,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal submit aplikasi: $error')),
       );
       return;
     }
@@ -62,7 +133,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F1013),
         title: Text(
-          '${widget.company} - Apply',
+          '${widget.post.name} - Apply',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w700,
@@ -74,10 +145,33 @@ class _JobApplyPageState extends State<JobApplyPage> {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
         children: [
           Container(
-            height: 210,
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFCFCFCF),
+              color: const Color(0xFF13151A),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF24262E)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.post.content,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Perusahaan: ${widget.post.name}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                Text(
+                  'Bidang: ${widget.post.role}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 14),
@@ -121,14 +215,10 @@ class _JobApplyPageState extends State<JobApplyPage> {
                     const SizedBox(width: 10),
                     if (!hasCv)
                       SizedBox(
-                        width: 96,
+                        width: 106,
                         child: AppButton(
-                          label: 'Upload CV',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const ProfileEditPage(),
-                            ),
-                          ),
+                          label: _uploadingCv ? 'Uploading...' : 'Upload CV',
+                          onTap: _uploadingCv ? null : _pickAndUploadCv,
                           variant: AppButtonVariant.outline,
                           height: 34,
                           fontSize: 11,

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/cv_store.dart';
-import '../models/profile_store.dart';
 import '../models/story_item.dart';
 import '../navigation/app_routes.dart';
+import '../models/post_item.dart';
+import '../services/profile_service.dart';
+import '../services/post_service.dart';
+import '../services/social_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/expandable_text.dart';
@@ -23,27 +28,87 @@ class ProfileEditPage extends StatefulWidget {
 }
 
 class _ProfileEditPageState extends State<ProfileEditPage> {
+  final ProfileService _profileService = ProfileService();
+  final PostService _postService = PostService();
+  final SocialService _socialService = SocialService();
+  final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
   final TextEditingController _educationController = TextEditingController();
   final TextEditingController _workController = TextEditingController();
+  final TextEditingController _roleController = TextEditingController();
 
   String _selectedPronoun = 'Ms.';
   String _selectedGender = 'Perempuan';
   bool _viewedProfileStory = false;
+  bool _loading = true;
+  int _postCount = 0;
+  int _followerCount = 0;
+  int _followingCount = 0;
+  bool _hasActiveStory = false;
+  String? _avatarUrl;
 
   @override
   void initState() {
     super.initState();
-    final ProfileData profile = ProfileStore.data.value;
-    _nameController.text = profile.name;
-    _bioController.text = profile.bio;
-    _educationController.text = profile.education;
-    _workController.text = profile.workExperience;
-    _selectedPronoun = profile.pronoun;
-    _selectedGender = profile.gender;
+    _loadProfile();
     _nameController.addListener(_refresh);
     _bioController.addListener(_refresh);
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final ProfileRecord profile = await _profileService.fetchMyProfile();
+      if (!mounted) return;
+      setState(() {
+        _nameController.text = profile.fullName;
+        _bioController.text = profile.bio;
+        _educationController.text = profile.education;
+        _workController.text = profile.workExperience;
+        _roleController.text = profile.role;
+        _selectedPronoun = profile.pronoun;
+        _selectedGender = profile.gender;
+        _avatarUrl = profile.avatarUrl;
+      });
+      final String? userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        final List<PostItem> posts = await _postService.fetchFeed();
+        final Map<String, int> followStats = await _socialService.getFollowStats(
+          userId,
+        );
+        if (!mounted) return;
+        final DateTime threshold = DateTime.now().subtract(
+          const Duration(days: 1),
+        );
+        setState(() {
+          _postCount =
+              posts.where((PostItem p) => p.authorId == userId).length;
+          _followerCount = followStats['followers'] ?? 0;
+          _followingCount = followStats['following'] ?? 0;
+          _hasActiveStory = posts.any(
+            (PostItem p) =>
+                p.authorId == userId &&
+                p.type == PostType.short &&
+                p.createdAt != null &&
+                p.createdAt!.isAfter(threshold),
+          );
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memuat profil dari database.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -54,6 +119,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     _bioController.dispose();
     _educationController.dispose();
     _workController.dispose();
+    _roleController.dispose();
     super.dispose();
   }
 
@@ -115,7 +181,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     );
 
     if (picked == null) return;
-    CvStore.setCv(picked);
+    CvStore.setCv(name: picked);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -131,7 +197,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         : _nameController.text.trim();
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+        builder: (_) => StoryViewerPage(
+          story: StoryItem(
+            label: label,
+            authorId: Supabase.instance.client.auth.currentUser?.id,
+          ),
+        ),
       ),
     );
     if (!mounted) return;
@@ -140,27 +211,62 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     });
   }
 
-  void _saveProfile() {
+  Future<void> _saveProfile() async {
     final String name = _nameController.text.trim();
     final String bio = _bioController.text.trim();
     final String education = _educationController.text.trim();
     final String work = _workController.text.trim();
+    final String role = _roleController.text.trim();
+    try {
+      await _profileService.upsertMyProfile(
+        fullName: name,
+        bio: bio,
+        pronoun: _selectedPronoun,
+        gender: _selectedGender,
+        education: education,
+        workExperience: work,
+        role: role,
+        avatarUrl: _avatarUrl,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profil berhasil diperbarui'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal simpan profil ke database.'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
 
-    final ProfileData updated = ProfileStore.data.value.copyWith(
-      name: name.isEmpty ? 'User' : name,
-      pronoun: _selectedPronoun,
-      bio: bio.isEmpty ? 'Belum ada bio.' : bio,
-      gender: _selectedGender,
-      education: education.isEmpty ? '-' : education,
-      workExperience: work.isEmpty ? '-' : work,
+  Future<void> _changePhoto() async {
+    final XFile? file = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
     );
-    ProfileStore.update(updated);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Profil berhasil diperbarui'),
-        duration: Duration(seconds: 1),
-      ),
-    );
+    if (file == null) return;
+    try {
+      final String url = await _profileService.uploadMyAvatar(file);
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = url;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto profil berhasil diubah.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal upload foto profil.')),
+      );
+    }
   }
 
   void _openConnections(ConnectionTab tab) {
@@ -183,6 +289,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               onSearchTap: _openSearch,
             ),
             const SizedBox(height: 8),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.only(top: 60),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -191,7 +303,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                       ? 'User'
                       : _nameController.text,
                   viewed: _viewedProfileStory,
-                  onTap: _openProfileStory,
+                  hasStory: _hasActiveStory,
+                  imageUrl: _avatarUrl,
+                  onTap: _hasActiveStory ? _openProfileStory : null,
+                  onAddTap: _changePhoto,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -213,16 +328,16 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const _MiniStat(label: 'Postingan', value: '68'),
+                          _MiniStat(label: 'Postingan', value: '$_postCount'),
                           _MiniStat(
                             label: 'Pengikut',
-                            value: '9.8K',
+                            value: '$_followerCount',
                             onTap: () =>
                                 _openConnections(ConnectionTab.followers),
                           ),
                           _MiniStat(
                             label: 'Mengikuti',
-                            value: '201',
+                            value: '$_followingCount',
                             onTap: () =>
                                 _openConnections(ConnectionTab.following),
                           ),
@@ -292,6 +407,11 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               label: 'Pengalaman Kerja',
               controller: _workController,
             ),
+            const SizedBox(height: 6),
+            _EditTextField(
+              label: 'Role',
+              controller: _roleController,
+            ),
             const SizedBox(height: 10),
             AppButton(
               label: 'Simpan Perubahan',
@@ -319,6 +439,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             ),
             const SizedBox(height: 6),
             _menuAction('Ganti Akun', icon: Icons.chevron_right, onTap: () {}),
+            ],
           ],
         ),
       ),
@@ -545,15 +666,29 @@ class _EditAvatar extends StatelessWidget {
     required this.label,
     required this.viewed,
     required this.onTap,
+    required this.hasStory,
+    this.imageUrl,
+    this.onAddTap,
   });
 
   final String label;
   final bool viewed;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool hasStory;
+  final String? imageUrl;
+  final VoidCallback? onAddTap;
 
   @override
-  Widget build(BuildContext context) =>
-      ProfileRingAvatar(label: label, size: 84, viewed: viewed, onTap: onTap);
+  Widget build(BuildContext context) => ProfileRingAvatar(
+    label: label,
+    size: 84,
+    viewed: viewed,
+    hasStory: hasStory,
+    imageUrl: imageUrl,
+    onTap: onTap,
+    showAdd: true,
+    onAddTap: onAddTap,
+  );
 }
 
 class _MiniStat extends StatelessWidget {

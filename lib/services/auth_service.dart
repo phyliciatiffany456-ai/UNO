@@ -32,4 +32,20 @@ class AuthService {
   Future<void> signOut() async {
     await _client.auth.signOut();
   }
+
+  Future<bool> resetPasswordDirect({
+    required String email,
+    required String newPassword,
+  }) async {
+    final dynamic result = await _client.rpc(
+      'prototype_reset_password_by_email',
+      params: <String, dynamic>{
+        'target_email': email,
+        'new_password': newPassword,
+      },
+    );
+
+    if (result is bool) return result;
+    return false;
+  }
 }

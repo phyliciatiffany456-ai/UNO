@@ -9,6 +9,8 @@ class ProfileRingAvatar extends StatelessWidget {
     this.size = 84,
     this.showAdd = false,
     this.onAddTap,
+    this.hasStory = true,
+    this.imageUrl,
   });
 
   final String label;
@@ -17,6 +19,8 @@ class ProfileRingAvatar extends StatelessWidget {
   final double size;
   final bool showAdd;
   final VoidCallback? onAddTap;
+  final bool hasStory;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +49,8 @@ class ProfileRingAvatar extends StatelessWidget {
               height: size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: ringGradient,
+                gradient: hasStory ? ringGradient : null,
+                color: hasStory ? null : const Color(0xFF2D313B),
               ),
               child: Center(
                 child: Container(
@@ -64,14 +69,21 @@ class ProfileRingAvatar extends StatelessWidget {
                         color: Color(0xFFE5E7EB),
                       ),
                       child: Center(
-                        child: Text(
-                          _initials(label),
-                          style: TextStyle(
-                            color: const Color(0xFF121417),
-                            fontSize: size * 0.19,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        child: (imageUrl?.isNotEmpty == true)
+                            ? ClipOval(
+                                child: Image.network(
+                                  imageUrl!,
+                                  fit: BoxFit.cover,
+                                  width: innerLight,
+                                  height: innerLight,
+                                  errorBuilder: (
+                                    BuildContext context,
+                                    Object error,
+                                    StackTrace? stackTrace,
+                                  ) => _FallbackInitial(label: label, size: size),
+                                ),
+                              )
+                            : _FallbackInitial(label: label, size: size),
                       ),
                     ),
                   ),
@@ -102,6 +114,25 @@ class ProfileRingAvatar extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _FallbackInitial extends StatelessWidget {
+  const _FallbackInitial({required this.label, required this.size});
+
+  final String label;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _initials(label),
+      style: TextStyle(
+        color: const Color(0xFF121417),
+        fontSize: size * 0.19,
+        fontWeight: FontWeight.w700,
       ),
     );
   }

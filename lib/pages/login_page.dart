@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../navigation/app_routes.dart';
+import 'forgot_password_page.dart';
+import 'register_page.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/auth_ui.dart';
@@ -60,9 +62,21 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _openRegister() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const RegisterPage()));
+  }
+
+  void _openForgotPassword() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ForgotPasswordPage()));
   }
 
   @override
@@ -71,14 +85,14 @@ class _LoginPageState extends State<LoginPage> {
       subtitle: 'Masuk untuk lanjut networking dan cari peluang baru.',
       bottomPrompt: 'Belum punya akun?',
       bottomActionText: 'Daftar',
-      onBottomActionTap: () => AppRoutes.goRegister(context),
+      onBottomActionTap: _openRegister,
       form: AuthCard(
         title: 'Login',
         children: [
           AuthInputField(
-            label: 'Email / Username',
+            label: 'Email',
             controller: _emailController,
-            hintText: 'contoh: tiffany@uno.app',
+            hintText: 'contoh: nama@email.com',
             keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 10),
@@ -107,7 +121,7 @@ class _LoginPageState extends State<LoginPage> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
-              onPressed: () => AppRoutes.goForgotPassword(context),
+              onPressed: _openForgotPassword,
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 foregroundColor: const Color(0xFFFF9A63),

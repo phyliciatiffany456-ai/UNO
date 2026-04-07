@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../services/post_service.dart';
 import '../widgets/pop_icon_button.dart';
 
 class StoryViewerPage extends StatefulWidget {
@@ -16,6 +18,7 @@ class StoryViewerPage extends StatefulWidget {
 
 class _StoryViewerPageState extends State<StoryViewerPage> {
   static const Duration _shortDuration = Duration(seconds: 30);
+  final PostService _postService = PostService();
 
   final TextEditingController _replyController = TextEditingController();
   final FocusNode _replyFocusNode = FocusNode();
@@ -24,20 +27,16 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
   final List<String> _comments = <String>[];
 
   late final PageController _pageController;
-  late final List<String> _shorts;
+  List<PostItem> _shorts = <PostItem>[];
   Timer? _timer;
   int _currentShort = 0;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    _shorts = <String>[
-      'Short dari ${widget.story.label}',
-      '${widget.story.label} lagi share tips kerja cepat',
-      '${widget.story.label} lagi update project terbaru',
-    ];
-    _startShortTimer();
+    _loadShorts();
   }
 
   @override
@@ -49,11 +48,42 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
     super.dispose();
   }
 
+  Future<void> _loadShorts() async {
+    final String? authorId = widget.story.authorId;
+    if (authorId == null) {
+      if (!mounted) return;
+      setState(() {
+        _shorts = <PostItem>[];
+        _loading = false;
+      });
+      return;
+    }
+
+    try {
+      final List<PostItem> shorts = await _postService.fetchShortPostsByAuthor(
+        authorId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _shorts = shorts;
+        _loading = false;
+      });
+      if (shorts.isNotEmpty) {
+        _startShortTimer();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
   void _startShortTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(_shortDuration, (_) {
       if (!mounted) return;
-      if (_currentShort >= _shorts.length - 1) {
+      if (_shorts.isEmpty || _currentShort >= _shorts.length - 1) {
         Navigator.of(context).pop();
         return;
       }
@@ -152,34 +182,79 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(18),
-                      child: PageView.builder(
-                        controller: _pageController,
-                        onPageChanged: (int index) {
-                          setState(() {
-                            _currentShort = index;
-                          });
-                          _startShortTimer();
-                        },
-                        itemCount: _shorts.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                              ),
+                      child: _loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : _shorts.isEmpty
+                          ? const Center(
                               child: Text(
-                                _shorts[index],
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                'Belum ada short di database.',
+                                style: TextStyle(color: Colors.white70),
                               ),
+                            )
+                          : PageView.builder(
+                              controller: _pageController,
+                              onPageChanged: (int index) {
+                                setState(() {
+                                  _currentShort = index;
+                                });
+                                _startShortTimer();
+                              },
+                              itemCount: _shorts.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final PostItem short = _shorts[index];
+                                final String? image = short.imageUrls.isNotEmpty
+                                    ? short.imageUrls.first
+                                    : null;
+                                return Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    if (image != null)
+                                      Image.network(
+                                        image,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (
+                                          BuildContext context,
+                                          Object error,
+                                          StackTrace? stackTrace,
+                                        ) =>
+                                            const ColoredBox(
+                                          color: Color(0xFF243042),
+                                        ),
+                                      )
+                                    else
+                                      const ColoredBox(color: Color(0xFF243042)),
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.black.withValues(alpha: 0.1),
+                                            Colors.black.withValues(alpha: 0.7),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 18,
+                                        ),
+                                        child: Text(
+                                          short.content,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
                     ),
                   ),
                   Positioned(
