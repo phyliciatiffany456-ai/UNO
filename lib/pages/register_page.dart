@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../navigation/app_routes.dart';
+import '../services/auth_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/auth_ui.dart';
 
@@ -20,6 +22,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  final AuthService _authService = AuthService();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -30,9 +34,59 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  void _handleRegister() {
+  Future<void> _handleRegister() async {
     FocusScope.of(context).unfocus();
-    AppRoutes.goHome(context);
+    final String fullName = _nameController.text.trim();
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text.trim();
+    final String confirmPassword = _confirmPasswordController.text.trim();
+
+    if (fullName.isEmpty || email.isEmpty || password.isEmpty) {
+      _showMessage('Nama, email, dan password wajib diisi.');
+      return;
+    }
+    if (password != confirmPassword) {
+      _showMessage('Konfirmasi password tidak sama.');
+      return;
+    }
+    if (password.length < 6) {
+      _showMessage('Password minimal 6 karakter.');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await _authService.signUp(
+        email: email,
+        password: password,
+        fullName: fullName,
+      );
+      if (!mounted) return;
+      _showMessage(
+        'Registrasi berhasil. Jika verifikasi email aktif, cek inbox kamu lalu login.',
+      );
+      AppRoutes.goLogin(context);
+    } on AuthException catch (error) {
+      _showMessage(error.message);
+    } catch (_) {
+      _showMessage('Register gagal. Coba lagi sebentar.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -103,8 +157,8 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
           const SizedBox(height: 16),
           AppButton(
-            label: 'Buat Akun',
-            onTap: _handleRegister,
+            label: _isSubmitting ? 'Memproses...' : 'Buat Akun',
+            onTap: _isSubmitting ? null : _handleRegister,
             height: 44,
             fontSize: 16,
             borderRadius: 12,

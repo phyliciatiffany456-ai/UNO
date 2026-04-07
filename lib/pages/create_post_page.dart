@@ -1,5 +1,10 @@
-import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../models/post_item.dart';
+import '../services/post_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/top_bar.dart';
@@ -17,10 +22,22 @@ class CreatePostPage extends StatefulWidget {
 }
 
 class _CreatePostPageState extends State<CreatePostPage> {
+  final TextEditingController _descriptionController = TextEditingController();
+  final PostService _postService = PostService();
+  final ImagePicker _imagePicker = ImagePicker();
+
   bool hideLikeAndViewCount = true;
   bool turnOffCommenting = true;
   String selectedCategory = 'Insight';
   String selectedAccessibility = 'Public';
+  bool _isPosting = false;
+  List<XFile> _selectedImages = <XFile>[];
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
   void _goHome() {
     Navigator.of(context).popUntil((Route<dynamic> route) => route.isFirst);
@@ -36,6 +53,70 @@ class _CreatePostPageState extends State<CreatePostPage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
+  }
+
+  Future<void> _pickImages() async {
+    final List<XFile> files = await _imagePicker.pickMultiImage(
+      imageQuality: 85,
+    );
+    if (files.isEmpty) return;
+    setState(() {
+      _selectedImages = files;
+    });
+  }
+
+  Future<void> _submitPost() async {
+    final String content = _descriptionController.text.trim();
+    if (content.isEmpty) {
+      _showMessage('Deskripsi postingan tidak boleh kosong.');
+      return;
+    }
+
+    setState(() {
+      _isPosting = true;
+    });
+
+    try {
+      await _postService.createPost(
+        content: content,
+        type: _mapCategory(selectedCategory),
+        accessibility: selectedAccessibility,
+        hideLikeAndViewCount: hideLikeAndViewCount,
+        turnOffCommenting: turnOffCommenting,
+        images: _selectedImages,
+      );
+      if (!mounted) return;
+      _showMessage('Postingan berhasil dipublikasikan.');
+      Navigator.of(context).pop();
+    } catch (error) {
+      _showMessage('Gagal upload postingan: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPosting = false;
+        });
+      }
+    }
+  }
+
+  PostType _mapCategory(String category) {
+    switch (category) {
+      case 'Short':
+        return PostType.short;
+      case 'Loker':
+        return PostType.job;
+      case 'Insight':
+      case 'Portofolio':
+      default:
+        return PostType.insight;
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -67,10 +148,97 @@ class _CreatePostPageState extends State<CreatePostPage> {
                 ],
               ),
             ),
-            Container(
-              height: 320,
-              width: double.infinity,
-              color: const Color(0xFFC8C8C8),
+            InkWell(
+              onTap: _isPosting ? null : _pickImages,
+              child: Container(
+                height: 260,
+                width: double.infinity,
+                color: const Color(0xFFC8C8C8),
+                child: _selectedImages.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate_outlined,
+                              color: Color(0xFF2D313B),
+                              size: 42,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Tap untuk pilih gambar',
+                              style: TextStyle(
+                                color: Color(0xFF2D313B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Stack(
+                        children: [
+                          ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _selectedImages.length,
+                            separatorBuilder: (BuildContext context, int index) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (BuildContext context, int index) {
+                              final XFile image = _selectedImages[index];
+                              return Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: _PickedImagePreview(
+                                      image: image,
+                                      width: 170,
+                                      height: 244,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: 6,
+                                    top: 6,
+                                    child: InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedImages = List<XFile>.from(
+                                            _selectedImages,
+                                          )..removeAt(index);
+                                        });
+                                      },
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black87,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        padding: const EdgeInsets.all(4),
+                                        child: const Icon(
+                                          Icons.close,
+                                          color: Colors.white,
+                                          size: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          Positioned(
+                            right: 10,
+                            bottom: 10,
+                            child: AppButton(
+                              label: 'Tambah Foto',
+                              onTap: _isPosting ? null : _pickImages,
+                              expand: false,
+                              height: 30,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
@@ -109,9 +277,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14),
-              child: _DescriptionField(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: _DescriptionField(controller: _descriptionController),
             ),
             const SizedBox(height: 8),
             Padding(
@@ -146,8 +314,8 @@ class _CreatePostPageState extends State<CreatePostPage> {
                 child: SizedBox(
                   width: 90,
                   child: AppButton(
-                    label: 'POST',
-                    onTap: () {},
+                    label: _isPosting ? 'UPLOAD...' : 'POST',
+                    onTap: _isPosting ? null : _submitPost,
                     height: 34,
                     fontSize: 12,
                   ),
@@ -170,6 +338,48 @@ class _CreatePostPageState extends State<CreatePostPage> {
           context,
         ).push(MaterialPageRoute<void>(builder: (_) => const ProfilePage())),
       ),
+    );
+  }
+}
+
+class _PickedImagePreview extends StatelessWidget {
+  const _PickedImagePreview({
+    required this.image,
+    required this.width,
+    required this.height,
+  });
+
+  final XFile image;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: image.readAsBytes(),
+      builder: (BuildContext context, AsyncSnapshot<Uint8List> snapshot) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            !snapshot.hasData) {
+          return Container(
+            width: width,
+            height: height,
+            color: const Color(0xFF9E9E9E),
+            alignment: Alignment.center,
+            child: const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+
+        return Image.memory(
+          snapshot.data!,
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+        );
+      },
     );
   }
 }
@@ -221,7 +431,9 @@ class _CreateDropdownField extends StatelessWidget {
 }
 
 class _DescriptionField extends StatelessWidget {
-  const _DescriptionField();
+  const _DescriptionField({required this.controller});
+
+  final TextEditingController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -232,11 +444,15 @@ class _DescriptionField extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFF3D00)),
       ),
-      child: const Align(
-        alignment: Alignment.topLeft,
-        child: Text(
-          'Deskripsi',
-          style: TextStyle(color: Colors.white70, fontSize: 12),
+      child: TextField(
+        controller: controller,
+        maxLines: null,
+        style: const TextStyle(color: Colors.white, fontSize: 12),
+        decoration: const InputDecoration(
+          hintText: 'Deskripsi',
+          hintStyle: TextStyle(color: Colors.white70, fontSize: 12),
+          border: InputBorder.none,
+          isCollapsed: true,
         ),
       ),
     );

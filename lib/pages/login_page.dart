@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../navigation/app_routes.dart';
+import '../services/auth_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/auth_ui.dart';
 
@@ -14,7 +16,9 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -23,9 +27,42 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
-    AppRoutes.goHome(context);
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage('Email dan password wajib diisi.');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await _authService.signIn(email: email, password: password);
+      if (!mounted) return;
+      AppRoutes.goHome(context);
+    } on AuthException catch (error) {
+      _showMessage(error.message);
+    } catch (_) {
+      _showMessage('Login gagal. Coba lagi sebentar.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -87,8 +124,8 @@ class _LoginPageState extends State<LoginPage> {
           ),
           const SizedBox(height: 6),
           AppButton(
-            label: 'Masuk',
-            onTap: _handleLogin,
+            label: _isSubmitting ? 'Memproses...' : 'Masuk',
+            onTap: _isSubmitting ? null : _handleLogin,
             height: 44,
             fontSize: 16,
             borderRadius: 12,

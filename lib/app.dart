@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'navigation/app_routes.dart';
 
@@ -7,6 +8,7 @@ class UnoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isLoggedIn = Supabase.instance.client.auth.currentSession != null;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'UNO LinkedIn Social',
@@ -43,7 +45,7 @@ class UnoApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      initialRoute: AppRoutes.login,
+      initialRoute: isLoggedIn ? AppRoutes.home : AppRoutes.login,
       onGenerateRoute: AppRoutes.onGenerateRoute,
     );
   }

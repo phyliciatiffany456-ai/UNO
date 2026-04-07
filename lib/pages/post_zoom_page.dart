@@ -21,12 +21,18 @@ class _PostZoomPageState extends State<PostZoomPage> {
       valueListenable: ProfileStore.data,
       builder: (BuildContext context, ProfileData profile, Widget? child) {
         final PostItem zoomPost = PostItem(
+          id: 'zoom-preview',
+          authorId: 'local-preview',
           name: profile.name,
           role: profile.workExperience,
           content:
               'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus luctus semper lacus, at aliquet neque pharetra sed. Cras sollicitudin at nibh non varius.',
           type: PostType.insight,
-          imageCount: 3,
+          imageUrls: const <String>[
+            'https://images.unsplash.com/photo-1498050108023-c5249f4df085',
+            'https://images.unsplash.com/photo-1551281044-8b1f5f0c5f22',
+            'https://images.unsplash.com/photo-1515879218367-8466d910aaa4',
+          ],
           canApply: false,
           isFollowed: true,
           hasStory: true,

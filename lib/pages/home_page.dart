@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../navigation/app_routes.dart';
 import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../services/post_service.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/feed_post.dart';
 import '../widgets/stories.dart';
@@ -25,46 +27,21 @@ class HomePage extends StatefulWidget {
     StoryItem(label: 'Dita Data', isViewed: false),
   ];
 
-  static const List<PostItem> posts = <PostItem>[
-    PostItem(
-      name: 'TiffanyPhylicia',
-      role: 'UI/UX Designer',
-      content:
-          'Insight: Portofolio yang kuat bukan cuma visual bagus, tapi proses problem solving yang jelas.',
-      type: PostType.insight,
-      imageCount: 3,
-    ),
-    PostItem(
-      name: 'fajar.engineer',
-      role: 'Mobile Engineer',
-      content:
-          'Short: Flutter tip hari ini, pisahkan widget reusable dari awal supaya scaling lebih gampang.',
-      type: PostType.short,
-      isFollowed: false,
-    ),
-    PostItem(
-      name: 'NexaTech Careers',
-      role: 'Hiring Team',
-      content:
-          'Loker: Flutter Developer (Remote). Butuh pengalaman state management dan integrasi API.',
-      type: PostType.job,
-      imageCount: 1,
-      canApply: true,
-      isFollowed: false,
-    ),
-  ];
-
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  final PostService _postService = PostService();
   late List<StoryItem> stories;
+  List<PostItem> _posts = <PostItem>[];
+  bool _loadingPosts = true;
 
   @override
   void initState() {
     super.initState();
     stories = List<StoryItem>.from(HomePage.initialStories);
+    _loadFeed();
   }
 
   Future<void> _openStory(int index) async {
@@ -102,6 +79,42 @@ class _HomePageState extends State<HomePage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
   }
 
+  Future<void> _loadFeed() async {
+    final User? user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      AppRoutes.goLogin(context);
+      return;
+    }
+
+    setState(() {
+      _loadingPosts = true;
+    });
+
+    try {
+      final List<PostItem> posts = await _postService.fetchFeed();
+      if (!mounted) return;
+      setState(() {
+        _posts = posts;
+      });
+    } catch (_) {
+      _showMessage('Gagal memuat feed dari database.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingPosts = false;
+        });
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,14 +133,28 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: ListView.separated(
-                itemBuilder: (BuildContext context, int index) {
-                  return FeedPost(post: HomePage.posts[index]);
-                },
-                separatorBuilder: (BuildContext context, int index) =>
-                    const SizedBox(height: 10),
-                itemCount: HomePage.posts.length,
-              ),
+              child: _loadingPosts
+                  ? const Center(child: CircularProgressIndicator())
+                  : _posts.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Belum ada postingan.\nYuk jadi yang pertama posting.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadFeed,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemBuilder: (BuildContext context, int index) {
+                          return FeedPost(post: _posts[index]);
+                        },
+                        separatorBuilder: (BuildContext context, int index) =>
+                            const SizedBox(height: 10),
+                        itemCount: _posts.length,
+                      ),
+                    ),
             ),
           ],
         ),

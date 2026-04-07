@@ -215,7 +215,24 @@ class _FeedPostState extends State<FeedPost> {
                       });
                     },
                     itemBuilder: (BuildContext context, int index) {
-                      return Container(color: const Color(0xFFCFCFCF));
+                      final String imageUrl = post.imageUrls[index];
+                      return Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (
+                          BuildContext context,
+                          Object error,
+                          StackTrace? stackTrace,
+                        ) =>
+                            Container(
+                          color: const Color(0xFFCFCFCF),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.broken_image_outlined,
+                            color: Color(0xFF4B5563),
+                          ),
+                        ),
+                      );
                     },
                   ),
                   if (post.imageCount > 1)
