@@ -128,6 +128,8 @@ class _ApplyPageState extends State<ApplyPage> {
                           final String? currentUserId =
                               _postService.currentUser?.id;
                           final bool isOwner = currentUserId == job.authorId;
+                          final bool isClosed = _isJobClosed(job);
+                          final bool canOpenApply = isOwner || !isClosed;
                           return _JobCard(
                             title: job.jobTitle ?? job.content,
                             profileName: job.name,
@@ -137,17 +139,23 @@ class _ApplyPageState extends State<ApplyPage> {
                             requirements: job.jobRequirements ?? '-',
                             chips: <String>[
                               'Job',
-                              isOwner ? 'Review Kandidat' : 'Apply Sekarang',
+                              isOwner
+                                  ? 'Review Kandidat'
+                                  : (isClosed ? 'Closed' : 'Apply Sekarang'),
                               'UNO',
                             ],
                             isProfileViewed: _viewedProfiles.contains(job.name),
                             onProfileTap: () => _openStory(context, job.name),
-                            onApplyTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => JobApplyPage(post: job),
-                              ),
-                            ),
-                            actionLabel: isOwner ? 'Review' : 'Apply',
+                            onApplyTap: canOpenApply
+                                ? () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => JobApplyPage(post: job),
+                                    ),
+                                  )
+                                : null,
+                            actionLabel: isOwner
+                                ? 'Review'
+                                : (isClosed ? 'Closed' : 'Apply'),
                           );
                         },
                       ),
@@ -169,12 +177,26 @@ class _ApplyPageState extends State<ApplyPage> {
     );
   }
 
+  bool _isJobClosed(PostItem job) {
+    final DateTime? deadline = job.jobDeadline;
+    if (deadline == null) return false;
+    final DateTime now = DateTime.now();
+    final DateTime todayDateOnly = DateTime(now.year, now.month, now.day);
+    final DateTime deadlineDateOnly = DateTime(
+      deadline.year,
+      deadline.month,
+      deadline.day,
+    );
+    return todayDateOnly.isAfter(deadlineDateOnly);
+  }
+
   String _deadlineText(PostItem job) {
     final DateTime? deadline = job.jobDeadline;
     if (deadline == null) return 'Open';
     final String month = deadline.month.toString().padLeft(2, '0');
     final String day = deadline.day.toString().padLeft(2, '0');
-    return 'Deadline $day/$month/${deadline.year}';
+    final bool closed = _isJobClosed(job);
+    return '${closed ? 'Closed' : 'Deadline'} $day/$month/${deadline.year}';
   }
 }
 

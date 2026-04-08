@@ -48,4 +48,17 @@ class AuthService {
     if (result is bool) return result;
     return false;
   }
+
+  Future<void> changePasswordWithOldPassword({
+    required String email,
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    await _client.auth.signInWithPassword(
+      email: email,
+      password: oldPassword,
+    );
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+    await _client.auth.signOut();
+  }
 }

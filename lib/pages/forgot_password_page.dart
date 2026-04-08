@@ -15,17 +15,20 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _oldPasswordController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
   final AuthService _authService = AuthService();
   bool _isSubmitting = false;
+  bool _obscureOld = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
   @override
   void dispose() {
     _emailController.dispose();
+    _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -34,15 +37,23 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   Future<void> _resetDirect() async {
     FocusScope.of(context).unfocus();
     final String email = _emailController.text.trim();
+    final String oldPassword = _oldPasswordController.text.trim();
     final String newPassword = _newPasswordController.text.trim();
     final String confirmPassword = _confirmPasswordController.text.trim();
 
-    if (email.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
-      _showMessage('Email dan password baru wajib diisi.');
+    if (email.isEmpty ||
+        oldPassword.isEmpty ||
+        newPassword.isEmpty ||
+        confirmPassword.isEmpty) {
+      _showMessage('Email, password lama, dan password baru wajib diisi.');
       return;
     }
     if (newPassword.length < 6) {
       _showMessage('Password minimal 6 karakter.');
+      return;
+    }
+    if (oldPassword == newPassword) {
+      _showMessage('Password baru harus berbeda dari password lama.');
       return;
     }
     if (newPassword != confirmPassword) {
@@ -55,15 +66,12 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     });
 
     try {
-      final bool changed = await _authService.resetPasswordDirect(
+      await _authService.changePasswordWithOldPassword(
         email: email,
+        oldPassword: oldPassword,
         newPassword: newPassword,
       );
       if (!mounted) return;
-      if (!changed) {
-        _showMessage('Email tidak ditemukan atau reset gagal.');
-        return;
-      }
       _showMessage('Password berhasil diganti. Silakan login.');
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
@@ -95,7 +103,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   @override
   Widget build(BuildContext context) {
     return AuthPageShell(
-      subtitle: 'Mode prototipe: ganti password langsung tanpa email reset.',
+      subtitle: 'Ubah password dengan verifikasi email dan password lama.',
       bottomPrompt: 'Ingat password?',
       bottomActionText: 'Kembali Login',
       onBottomActionTap: () {
@@ -115,6 +123,28 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             controller: _emailController,
             hintText: 'contoh: nama@email.com',
             keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 10),
+          AuthInputField(
+            label: 'Password Lama',
+            controller: _oldPasswordController,
+            hintText: 'Masukkan password lama',
+            obscureText: _obscureOld,
+            suffixIcon: IconButton(
+              splashRadius: 18,
+              onPressed: () {
+                setState(() {
+                  _obscureOld = !_obscureOld;
+                });
+              },
+              icon: Icon(
+                _obscureOld
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: Colors.white70,
+                size: 18,
+              ),
+            ),
           ),
           const SizedBox(height: 10),
           AuthInputField(

@@ -27,6 +27,10 @@ class JobApplicationRecord {
     required this.status,
     this.reviewerNote,
     this.reviewedAt,
+    this.interviewType,
+    this.interviewLocation,
+    this.interviewLink,
+    this.interviewAt,
     this.createdAt,
   });
 
@@ -39,6 +43,10 @@ class JobApplicationRecord {
   final String status;
   final String? reviewerNote;
   final DateTime? reviewedAt;
+  final String? interviewType;
+  final String? interviewLocation;
+  final String? interviewLink;
+  final DateTime? interviewAt;
   final DateTime? createdAt;
 }
 
@@ -102,11 +110,19 @@ class JobApplicationService {
     final User user = _requireUser();
     final List<Map<String, dynamic>> posts = await _client
         .from('posts')
-        .select('author_id')
+        .select('author_id,job_deadline')
         .eq('id', jobPostId)
         .limit(1);
     if (posts.isNotEmpty && posts.first['author_id']?.toString() == user.id) {
       throw Exception('Pemilik loker tidak bisa submit CV ke post sendiri.');
+    }
+    if (posts.isNotEmpty) {
+      final DateTime? deadline = DateTime.tryParse(
+        (posts.first['job_deadline'] as String?) ?? '',
+      );
+      if (_isDeadlineClosed(deadline)) {
+        throw Exception('Lowongan ini sudah ditutup karena melewati deadline.');
+      }
     }
 
     await _client.from(applicationsTable).upsert(
@@ -164,9 +180,71 @@ class JobApplicationService {
         status: (row['status'] as String?) ?? 'waiting_review',
         reviewerNote: row['reviewer_note'] as String?,
         reviewedAt: DateTime.tryParse((row['reviewed_at'] as String?) ?? ''),
+        interviewType: row['interview_type'] as String?,
+        interviewLocation: row['interview_location'] as String?,
+        interviewLink: row['interview_link'] as String?,
+        interviewAt: DateTime.tryParse((row['interview_at'] as String?) ?? ''),
         createdAt: DateTime.tryParse((row['created_at'] as String?) ?? ''),
       );
     }).toList();
+  }
+
+  Future<JobApplicationRecord?> fetchMyApplicationForJob(String jobPostId) async {
+    final User me = _requireUser();
+    final List<Map<String, dynamic>> rows = await _client
+        .from(applicationsTable)
+        .select()
+        .eq('job_post_id', jobPostId)
+        .eq('applicant_id', me.id)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final Map<String, dynamic> row = rows.first;
+    return JobApplicationRecord(
+      id: row['id'].toString(),
+      jobPostId: row['job_post_id'].toString(),
+      applicantId: row['applicant_id'].toString(),
+      applicantName: me.email ?? 'User',
+      cvFileName: (row['cv_file_name'] as String?) ?? '-',
+      cvPublicUrl: (row['cv_public_url'] as String?) ?? '',
+      status: (row['status'] as String?) ?? 'waiting_review',
+      reviewerNote: row['reviewer_note'] as String?,
+      reviewedAt: DateTime.tryParse((row['reviewed_at'] as String?) ?? ''),
+      interviewType: row['interview_type'] as String?,
+      interviewLocation: row['interview_location'] as String?,
+      interviewLink: row['interview_link'] as String?,
+      interviewAt: DateTime.tryParse((row['interview_at'] as String?) ?? ''),
+      createdAt: DateTime.tryParse((row['created_at'] as String?) ?? ''),
+    );
+  }
+
+  Future<void> scheduleInterview({
+    required String applicationId,
+    required String interviewType,
+    String? interviewLocation,
+    String? interviewLink,
+    DateTime? interviewAt,
+  }) async {
+    _requireUser();
+    final String normalizedType = interviewType.toLowerCase();
+    if (normalizedType != 'onsite' && normalizedType != 'online') {
+      throw Exception('Tipe interview tidak valid.');
+    }
+    if (normalizedType == 'onsite' &&
+        (interviewLocation == null || interviewLocation.trim().isEmpty)) {
+      throw Exception('Lokasi interview onsite wajib diisi.');
+    }
+    if (normalizedType == 'online' &&
+        (interviewLink == null || interviewLink.trim().isEmpty)) {
+      throw Exception('Link meeting online wajib diisi.');
+    }
+
+    await _client.from(applicationsTable).update(<String, dynamic>{
+      'interview_type': normalizedType,
+      'interview_location':
+          normalizedType == 'onsite' ? interviewLocation?.trim() : null,
+      'interview_link': normalizedType == 'online' ? interviewLink?.trim() : null,
+      'interview_at': interviewAt?.toIso8601String(),
+    }).eq('id', applicationId);
   }
 
   Future<void> updateApplicationStatus({
@@ -174,15 +252,33 @@ class JobApplicationService {
     required String status,
     String? reviewerNote,
   }) async {
-    _requireUser();
-    await _client.rpc(
-      'owner_update_application_status',
-      params: <String, dynamic>{
-        'target_application_id': applicationId,
-        'new_status': status,
-        'new_note': reviewerNote,
-      },
-    );
+    final User reviewer = _requireUser();
+    try {
+      await _client.rpc(
+        'owner_update_application_status',
+        params: <String, dynamic>{
+          'target_application_id': applicationId,
+          'new_status': status,
+          'new_note': reviewerNote,
+        },
+      );
+    } on PostgrestException catch (error) {
+      final String message = error.message.toLowerCase();
+      final bool rpcNotFound =
+          error.code == 'PGRST202' ||
+          message.contains('owner_update_application_status') ||
+          message.contains('function') && message.contains('not found');
+      if (!rpcNotFound) {
+        rethrow;
+      }
+
+      await _client.from(applicationsTable).update(<String, dynamic>{
+        'status': status,
+        'reviewer_id': reviewer.id,
+        'reviewer_note': reviewerNote,
+        'reviewed_at': DateTime.now().toIso8601String(),
+      }).eq('id', applicationId);
+    }
   }
 
   String _extension(String fileName) {
@@ -203,5 +299,15 @@ class JobApplicationService {
       default:
         return 'application/pdf';
     }
+  }
+
+  bool _isDeadlineClosed(DateTime? deadline) {
+    if (deadline == null) return false;
+    final DateTime today = DateTime.now();
+    final DateTime todayDateOnly =
+        DateTime(today.year, today.month, today.day);
+    final DateTime deadlineDateOnly =
+        DateTime(deadline.year, deadline.month, deadline.day);
+    return todayDateOnly.isAfter(deadlineDateOnly);
   }
 }

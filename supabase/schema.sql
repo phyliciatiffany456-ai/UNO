@@ -610,6 +610,73 @@ for insert
 to authenticated
 with check (user_id = auth.uid());
 
+create or replace function public.ensure_direct_room(
+  target_user_id uuid,
+  target_room_name text default 'Direct Chat'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_uid uuid;
+  found_room_id uuid;
+  final_name text;
+begin
+  current_uid := auth.uid();
+  if current_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if target_user_id is null or target_user_id = current_uid then
+    raise exception 'invalid_target_user';
+  end if;
+
+  select r.id
+  into found_room_id
+  from public.chat_rooms r
+  where r.is_group = false
+    and exists (
+      select 1 from public.chat_room_members m
+      where m.room_id = r.id and m.user_id = current_uid
+    )
+    and exists (
+      select 1 from public.chat_room_members m
+      where m.room_id = r.id and m.user_id = target_user_id
+    )
+    and not exists (
+      select 1 from public.chat_room_members m
+      where m.room_id = r.id
+        and m.user_id not in (current_uid, target_user_id)
+    )
+  limit 1;
+
+  if found_room_id is not null then
+    return found_room_id;
+  end if;
+
+  final_name := coalesce(nullif(trim(target_room_name), ''), 'Direct Chat');
+
+  insert into public.chat_rooms(name, is_group, created_by)
+  values (final_name, false, current_uid)
+  returning id into found_room_id;
+
+  insert into public.chat_room_members(room_id, user_id)
+  values (found_room_id, current_uid)
+  on conflict (room_id, user_id) do nothing;
+
+  insert into public.chat_room_members(room_id, user_id)
+  values (found_room_id, target_user_id)
+  on conflict (room_id, user_id) do nothing;
+
+  return found_room_id;
+end;
+$$;
+
+revoke all on function public.ensure_direct_room(uuid, text) from public;
+grant execute on function public.ensure_direct_room(uuid, text) to authenticated;
+
 drop policy if exists "Members can read room messages" on public.chat_messages;
 create policy "Members can read room messages"
 on public.chat_messages

@@ -77,7 +77,13 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 
   Future<void> _submitPost() async {
-    final String content = _descriptionController.text.trim();
+    final bool isJobPost = selectedCategory == 'Loker';
+    final String rawContent = _descriptionController.text.trim();
+    final String jobTitle = _jobTitleController.text.trim();
+    final String content = rawContent.isNotEmpty
+        ? rawContent
+        : (isJobPost ? jobTitle : '');
+
     if (content.isEmpty) {
       _showMessage('Deskripsi postingan tidak boleh kosong.');
       return;
@@ -95,7 +101,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
         hideLikeAndViewCount: hideLikeAndViewCount,
         turnOffCommenting: turnOffCommenting,
         images: _selectedImages,
-        jobTitle: _jobTitleController.text.trim(),
+        jobTitle: jobTitle,
         jobLocation: _jobLocationController.text.trim(),
         jobDomicile: _jobDomicileController.text.trim(),
         jobRequirements: _jobRequirementsController.text.trim(),
@@ -109,6 +115,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
       if (raw.contains('bucket not found')) {
         _showMessage(
           'Bucket Storage `post-images` belum ada. Buat dulu bucket di Supabase, lalu coba upload lagi.',
+        );
+      } else if (raw.contains('violates check constraint') &&
+          raw.contains('category')) {
+        _showMessage(
+          'Schema Supabase untuk kolom category belum support job/loker. Jalankan ulang file supabase/schema.sql di SQL Editor.',
+        );
+      } else if (raw.contains('row-level security')) {
+        _showMessage(
+          'Akun belum punya izin insert posts. Pastikan login, lalu jalankan ulang supabase/schema.sql agar policy terbaru aktif.',
         );
       } else {
         _showMessage('Gagal upload postingan: $error');
