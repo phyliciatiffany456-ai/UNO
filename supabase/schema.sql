@@ -362,6 +362,10 @@ create table if not exists public.job_applications (
   reviewer_id uuid references auth.users (id) on delete set null,
   reviewer_note text,
   reviewed_at timestamptz,
+  interview_type text check (interview_type in ('onsite', 'online')),
+  interview_location text,
+  interview_link text,
+  interview_at timestamptz,
   created_at timestamptz not null default now(),
   unique (job_post_id, applicant_id)
 );
@@ -371,6 +375,29 @@ alter table public.job_applications
   add column if not exists reviewer_note text;
 alter table public.job_applications
   add column if not exists reviewed_at timestamptz;
+alter table public.job_applications
+  add column if not exists interview_type text;
+alter table public.job_applications
+  add column if not exists interview_location text;
+alter table public.job_applications
+  add column if not exists interview_link text;
+alter table public.job_applications
+  add column if not exists interview_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'job_applications_interview_type_check'
+      and conrelid = 'public.job_applications'::regclass
+  ) then
+    alter table public.job_applications
+      add constraint job_applications_interview_type_check
+      check (interview_type in ('onsite', 'online') or interview_type is null);
+  end if;
+end
+$$;
 
 alter table public.job_applications enable row level security;
 

@@ -43,6 +43,10 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>UNO membutuhkan akses kamera untuk interview online.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>UNO membutuhkan akses mikrofon untuk interview online.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

@@ -38,6 +38,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool _viewedProfileStory = false;
   bool _loading = true;
+  _ProfileTab _activeTab = _ProfileTab.grid;
   List<PostItem> _myPosts = <PostItem>[];
   String _displayName = 'User';
   String _bio = 'Belum ada bio.';
@@ -124,6 +125,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final double width = MediaQuery.of(context).size.width;
     final double tileWidth = (width - 16) / 3;
+    final List<PostItem> visiblePosts = _filteredPosts();
 
     return Scaffold(
       body: SafeArea(
@@ -264,18 +266,35 @@ class _ProfilePageState extends State<ProfilePage> {
                           Expanded(
                             child: _TabIcon(
                               icon: Icons.grid_on_rounded,
-                              active: true,
-                              onTap: () {},
+                              active: _activeTab == _ProfileTab.grid,
+                              onTap: () {
+                                setState(() {
+                                  _activeTab = _ProfileTab.grid;
+                                });
+                              },
                             ),
                           ),
                           Expanded(
                             child: _TabIcon(
                               icon: Icons.video_collection_outlined,
-                              onTap: () {},
+                              active: _activeTab == _ProfileTab.video,
+                              onTap: () {
+                                setState(() {
+                                  _activeTab = _ProfileTab.video;
+                                });
+                              },
                             ),
                           ),
                           Expanded(
-                            child: _TabIcon(icon: Icons.repeat, onTap: () {}),
+                            child: _TabIcon(
+                              icon: Icons.work_outline,
+                              active: _activeTab == _ProfileTab.job,
+                              onTap: () {
+                                setState(() {
+                                  _activeTab = _ProfileTab.job;
+                                });
+                              },
+                            ),
                           ),
                           Expanded(
                             child: _TabIcon(
@@ -290,12 +309,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      if (_myPosts.isEmpty)
+                      if (visiblePosts.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
                           child: Center(
                             child: Text(
-                              'Belum ada postingan dari akun ini.',
+                              'Belum ada postingan di tab ini.',
                               style: TextStyle(color: Colors.white70),
                             ),
                           ),
@@ -304,7 +323,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         Wrap(
                           spacing: 4,
                           runSpacing: 4,
-                          children: _myPosts.map((PostItem post) {
+                          children: visiblePosts.map((PostItem post) {
                             final bool hasImage = post.imageUrls.isNotEmpty;
                             return InkWell(
                               onTap: () => Navigator.of(context).push(
@@ -450,7 +469,33 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+
+  List<PostItem> _filteredPosts() {
+    switch (_activeTab) {
+      case _ProfileTab.video:
+        return _myPosts.where(_isVideoPost).toList();
+      case _ProfileTab.job:
+        return _myPosts
+            .where((PostItem post) => post.type == PostType.job)
+            .toList();
+      case _ProfileTab.grid:
+      default:
+        return _myPosts;
+    }
+  }
+
+  bool _isVideoPost(PostItem post) {
+    if (post.type == PostType.short) return true;
+    final String content = post.content.toLowerCase();
+    final bool isVideoLink = content.contains('youtube.com') ||
+        content.contains('youtu.be') ||
+        content.contains('vimeo.com') ||
+        content.contains('.mp4');
+    return isVideoLink;
+  }
 }
+
+enum _ProfileTab { grid, video, job }
 
 class _ProfileStat extends StatelessWidget {
   const _ProfileStat({required this.label, required this.value, this.onTap});

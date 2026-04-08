@@ -85,6 +85,24 @@ class ChatService {
     return roomId;
   }
 
+  Future<String> ensureDirectRoomWithUser({
+    required String otherUserId,
+    required String otherUserName,
+  }) async {
+    final User user = _requireUser();
+    if (otherUserId == user.id) {
+      throw Exception('Tidak bisa membuat room chat dengan diri sendiri.');
+    }
+    final dynamic result = await _client.rpc(
+      'ensure_direct_room',
+      params: <String, dynamic>{
+        'target_user_id': otherUserId,
+        'target_room_name': 'HR - $otherUserName',
+      },
+    );
+    return result.toString();
+  }
+
   Future<List<ChatMessageItem>> fetchMessages(String roomId) async {
     final List<Map<String, dynamic>> rows = await _client
         .from('chat_messages')

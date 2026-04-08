@@ -10,7 +10,16 @@ import 'notifications_page.dart';
 import 'search_page.dart';
 
 class ChatBoxPage extends StatefulWidget {
-  const ChatBoxPage({super.key});
+  const ChatBoxPage({
+    super.key,
+    this.initialRoomId,
+    this.roomTitle,
+    this.isGroupRoom = true,
+  });
+
+  final String? initialRoomId;
+  final String? roomTitle;
+  final bool isGroupRoom;
 
   @override
   State<ChatBoxPage> createState() => _ChatBoxPageState();
@@ -26,7 +35,12 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
   void initState() {
     super.initState();
     _controller.addListener(_refreshInputState);
-    _setupRoom();
+    if (widget.initialRoomId != null) {
+      _roomId = widget.initialRoomId;
+      _roomError = null;
+    } else {
+      _setupRoom();
+    }
   }
 
   Future<void> _setupRoom() async {
@@ -81,6 +95,8 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
 
   @override
   Widget build(BuildContext context) {
+    final String title = widget.roomTitle ?? 'Komunitas UNO';
+    final bool isGroup = widget.roomTitle == null ? true : widget.isGroupRoom;
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -119,11 +135,12 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
-                                  builder: (_) => const ChatProfileInfoPage(
-                                    name: 'Komunitas UNO',
-                                    role: 'Group Chat',
-                                    bio:
-                                        'Ruang obrolan komunitas UNO.',
+                                  builder: (_) => ChatProfileInfoPage(
+                                    name: title,
+                                    role: isGroup ? 'Group Chat' : 'Direct Chat',
+                                    bio: isGroup
+                                        ? 'Ruang obrolan komunitas UNO.'
+                                        : 'Obrolan private untuk proses rekrutmen.',
                                   ),
                                 ),
                               );
@@ -131,7 +148,7 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                             child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 2),
                               child: Text(
-                                'Komunitas UNO',
+                                title,
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 13,
@@ -143,8 +160,12 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                           ),
                         ),
                         Icon(
-                          Icons.local_fire_department,
-                          color: Color(0xFFFFA84D),
+                          isGroup
+                              ? Icons.local_fire_department
+                              : Icons.verified_user_outlined,
+                          color: isGroup
+                              ? const Color(0xFFFFA84D)
+                              : const Color(0xFF34D399),
                           size: 18,
                         ),
                       ],
