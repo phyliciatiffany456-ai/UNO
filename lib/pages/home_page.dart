@@ -7,6 +7,7 @@ import '../navigation/app_routes.dart';
 import '../models/post_item.dart';
 import '../models/story_item.dart';
 import '../services/post_service.dart';
+import '../services/social_service.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/feed_post.dart';
 import '../widgets/stories.dart';
@@ -26,6 +27,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final PostService _postService = PostService();
+  final SocialService _socialService = SocialService();
   List<StoryItem> stories = <StoryItem>[];
   List<PostItem> _posts = <PostItem>[];
   bool _loadingPosts = true;
@@ -102,9 +104,14 @@ class _HomePageState extends State<HomePage> {
         latestAuthorId: latestAuthorId,
         currentUserId: user.id,
       );
+      final Set<String> followingIds = await _socialService.getFollowingIds();
       setState(() {
         _posts = posts;
-        stories = _buildStories(posts, user.id);
+        stories = _buildStories(
+          posts,
+          currentUserId: user.id,
+          followingIds: followingIds,
+        );
       });
     } catch (_) {
       _showMessage('Gagal memuat feed dari database.');
@@ -117,31 +124,48 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  List<StoryItem> _buildStories(List<PostItem> posts, String currentUserId) {
-    final Set<String> seenAuthorIds = <String>{};
-    final List<StoryItem> result = <StoryItem>[];
+  List<StoryItem> _buildStories(
+    List<PostItem> posts, {
+    required String currentUserId,
+    required Set<String> followingIds,
+  }) {
     final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+    final Map<String, PostItem> latestStoryByAuthor = <String, PostItem>{};
 
     for (final PostItem post in posts) {
       if (post.type != PostType.short) continue;
       final DateTime? createdAt = post.createdAt;
       if (createdAt == null || createdAt.isBefore(threshold)) continue;
-      if (seenAuthorIds.contains(post.authorId)) continue;
-      seenAuthorIds.add(post.authorId);
-      result.add(
-        StoryItem(
-          label: post.name,
-          authorId: post.authorId,
-          isMine: post.authorId == currentUserId,
-          isViewed: StorySeenStore.isSeen(
-            authorId: post.authorId,
-            label: post.name,
-          ),
-        ),
-      );
+      final bool isMine = post.authorId == currentUserId;
+      final bool isFollowed = followingIds.contains(post.authorId);
+      if (!isMine && !isFollowed) continue;
+      latestStoryByAuthor.putIfAbsent(post.authorId, () => post);
     }
 
-    return result;
+    final List<PostItem> orderedStories = latestStoryByAuthor.values.toList()
+      ..sort((PostItem a, PostItem b) {
+        final bool aMine = a.authorId == currentUserId;
+        final bool bMine = b.authorId == currentUserId;
+        if (aMine && !bMine) return -1;
+        if (!aMine && bMine) return 1;
+        final DateTime aCreatedAt = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final DateTime bCreatedAt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bCreatedAt.compareTo(aCreatedAt);
+      });
+
+    return orderedStories
+        .map(
+          (PostItem post) => StoryItem(
+            label: post.name,
+            authorId: post.authorId,
+            isMine: post.authorId == currentUserId,
+            isViewed: StorySeenStore.isSeen(
+              authorId: post.authorId,
+              label: post.name,
+            ),
+          ),
+        )
+        .toList();
   }
 
   void _showMessage(String message) {

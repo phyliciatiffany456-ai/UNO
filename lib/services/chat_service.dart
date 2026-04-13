@@ -5,11 +5,15 @@ class ChatRoomItem {
     required this.id,
     required this.name,
     required this.isGroup,
+    this.memberCount = 0,
+    this.createdBy,
   });
 
   final String id;
   final String name;
   final bool isGroup;
+  final int memberCount;
+  final String? createdBy;
 }
 
 class ChatMessageItem {
@@ -40,20 +44,37 @@ class ChatService {
     final User user = _requireUser();
     final List<Map<String, dynamic>> memberRows = await _client
         .from('chat_room_members')
-        .select('room_id,chat_rooms(id,name,is_group)')
+        .select('room_id,chat_rooms(id,name,is_group,created_by)')
         .eq('user_id', user.id);
+
+    final List<String> roomIds = memberRows
+        .map((Map<String, dynamic> row) => row['room_id'].toString())
+        .where((String id) => id.isNotEmpty && id != 'null')
+        .toList();
+    final Map<String, int> memberCounts = await _fetchMemberCounts(roomIds);
 
     return memberRows.map((Map<String, dynamic> row) {
       final Map<String, dynamic> room =
           row['chat_rooms'] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final String roomId = room['id'].toString();
       return ChatRoomItem(
-        id: room['id'].toString(),
+        id: roomId,
         name: (room['name'] as String?)?.trim().isNotEmpty == true
             ? room['name'].toString()
             : 'Chat',
         isGroup: room['is_group'] as bool? ?? false,
+        memberCount: memberCounts[roomId] ?? 0,
+        createdBy: room['created_by']?.toString(),
       );
     }).toList();
+  }
+
+  Future<List<ChatRoomItem>> fetchMyGroupRooms() async {
+    final List<ChatRoomItem> rooms = await fetchMyRooms();
+    final List<ChatRoomItem> groups =
+        rooms.where((ChatRoomItem room) => room.isGroup).toList();
+    groups.sort((ChatRoomItem a, ChatRoomItem b) => a.name.compareTo(b.name));
+    return groups;
   }
 
   Future<String> ensureGlobalCommunityRoom() async {
@@ -101,6 +122,67 @@ class ChatService {
       },
     );
     return result.toString();
+  }
+
+  Future<String> createGroupRoom({
+    required String name,
+  }) async {
+    final User user = _requireUser();
+    final Map<String, dynamic> created = await _client
+        .from('chat_rooms')
+        .insert(<String, dynamic>{
+          'name': name.trim().isEmpty ? 'Grup Baru' : name.trim(),
+          'is_group': true,
+          'created_by': user.id,
+        })
+        .select('id')
+        .single();
+
+    final String roomId = created['id'].toString();
+    await _client.from('chat_room_members').upsert(<String, dynamic>{
+      'room_id': roomId,
+      'user_id': user.id,
+    }, onConflict: 'room_id,user_id');
+    return roomId;
+  }
+
+  Future<void> joinGroupByCode(String roomCode) async {
+    final User user = _requireUser();
+    final String normalizedCode = roomCode.trim();
+    if (normalizedCode.isEmpty) {
+      throw Exception('Kode grup wajib diisi.');
+    }
+
+    final List<Map<String, dynamic>> rooms = await _client
+        .from('chat_rooms')
+        .select('id,is_group')
+        .eq('id', normalizedCode)
+        .limit(1);
+    if (rooms.isEmpty) {
+      throw Exception('Kode grup tidak ditemukan.');
+    }
+    if (rooms.first['is_group'] != true) {
+      throw Exception('Kode ini bukan grup.');
+    }
+
+    await _client.from('chat_room_members').upsert(<String, dynamic>{
+      'room_id': normalizedCode,
+      'user_id': user.id,
+    }, onConflict: 'room_id,user_id');
+  }
+
+  Future<Map<String, int>> _fetchMemberCounts(List<String> roomIds) async {
+    if (roomIds.isEmpty) return <String, int>{};
+    final List<Map<String, dynamic>> rows = await _client
+        .from('chat_room_members')
+        .select('room_id')
+        .inFilter('room_id', roomIds);
+    final Map<String, int> counts = <String, int>{};
+    for (final Map<String, dynamic> row in rows) {
+      final String roomId = row['room_id'].toString();
+      counts[roomId] = (counts[roomId] ?? 0) + 1;
+    }
+    return counts;
   }
 
   Future<List<ChatMessageItem>> fetchMessages(String roomId) async {

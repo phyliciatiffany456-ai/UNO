@@ -573,8 +573,17 @@ create table if not exists public.chat_rooms (
   name text not null,
   is_group boolean not null default false,
   created_by uuid references auth.users (id) on delete set null,
+  room_code text,
   created_at timestamptz not null default now()
 );
+alter table public.chat_rooms
+  add column if not exists is_group boolean not null default false;
+alter table public.chat_rooms
+  add column if not exists created_by uuid references auth.users (id) on delete set null;
+alter table public.chat_rooms
+  add column if not exists room_code text;
+alter table public.chat_rooms
+  add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.chat_room_members (
   id uuid primary key default gen_random_uuid(),
@@ -583,6 +592,8 @@ create table if not exists public.chat_room_members (
   created_at timestamptz not null default now(),
   unique (room_id, user_id)
 );
+alter table public.chat_room_members
+  add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
@@ -591,6 +602,26 @@ create table if not exists public.chat_messages (
   content text not null,
   created_at timestamptz not null default now()
 );
+alter table public.chat_messages
+  add column if not exists created_at timestamptz not null default now();
+
+update public.chat_rooms
+set room_code = upper(substr(replace(id::text, '-', ''), 1, 8))
+where room_code is null or btrim(room_code) = '';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'chat_rooms_room_code_key'
+      and conrelid = 'public.chat_rooms'::regclass
+  ) then
+    alter table public.chat_rooms
+      add constraint chat_rooms_room_code_key unique (room_code);
+  end if;
+end
+$$;
 
 alter table public.chat_rooms enable row level security;
 alter table public.chat_room_members enable row level security;
@@ -636,6 +667,180 @@ on public.chat_room_members
 for insert
 to authenticated
 with check (user_id = auth.uid());
+
+create or replace function public.create_group_room(
+  target_room_name text,
+  member_ids uuid[] default '{}'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_uid uuid;
+  created_room_id uuid;
+  target_member_id uuid;
+  clean_room_name text;
+begin
+  current_uid := auth.uid();
+  if current_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  clean_room_name := coalesce(nullif(trim(target_room_name), ''), 'Grup Baru');
+
+  insert into public.chat_rooms(name, is_group, created_by)
+  values (clean_room_name, true, current_uid)
+  returning id into created_room_id;
+
+  insert into public.chat_room_members(room_id, user_id)
+  values (created_room_id, current_uid)
+  on conflict (room_id, user_id) do nothing;
+
+  foreach target_member_id in array coalesce(member_ids, '{}') loop
+    if target_member_id is not null and target_member_id <> current_uid then
+      insert into public.chat_room_members(room_id, user_id)
+      values (created_room_id, target_member_id)
+      on conflict (room_id, user_id) do nothing;
+    end if;
+  end loop;
+
+  return created_room_id;
+end;
+$$;
+
+revoke all on function public.create_group_room(text, uuid[]) from public;
+grant execute on function public.create_group_room(text, uuid[]) to authenticated;
+
+create or replace function public.create_group_room(
+  target_room_name text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_uid uuid;
+  created_room_id uuid;
+  generated_room_code text;
+  clean_room_name text;
+begin
+  current_uid := auth.uid();
+  if current_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  clean_room_name := coalesce(nullif(trim(target_room_name), ''), 'Grup Baru');
+  generated_room_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+
+  insert into public.chat_rooms(name, is_group, created_by, room_code)
+  values (clean_room_name, true, current_uid, generated_room_code)
+  returning id into created_room_id;
+
+  insert into public.chat_room_members(room_id, user_id)
+  values (created_room_id, current_uid)
+  on conflict (room_id, user_id) do nothing;
+
+  return created_room_id;
+end;
+$$;
+
+revoke all on function public.create_group_room(text) from public;
+grant execute on function public.create_group_room(text) to authenticated;
+
+create or replace function public.invite_users_to_group(
+  target_room_id uuid,
+  member_ids uuid[]
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_uid uuid;
+  target_member_id uuid;
+  room_owner_id uuid;
+  room_is_group boolean;
+begin
+  current_uid := auth.uid();
+  if current_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  select created_by, is_group
+  into room_owner_id, room_is_group
+  from public.chat_rooms
+  where id = target_room_id
+  limit 1;
+
+  if room_owner_id is null then
+    raise exception 'room_not_found';
+  end if;
+
+  if room_is_group is distinct from true then
+    raise exception 'room_is_not_group';
+  end if;
+
+  if room_owner_id <> current_uid then
+    raise exception 'not_group_owner';
+  end if;
+
+  foreach target_member_id in array coalesce(member_ids, '{}') loop
+    if target_member_id is not null then
+      insert into public.chat_room_members(room_id, user_id)
+      values (target_room_id, target_member_id)
+      on conflict (room_id, user_id) do nothing;
+    end if;
+  end loop;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.invite_users_to_group(uuid, uuid[]) from public;
+grant execute on function public.invite_users_to_group(uuid, uuid[]) to authenticated;
+
+create or replace function public.join_group_by_code(
+  target_room_code text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_uid uuid;
+  found_room_id uuid;
+begin
+  current_uid := auth.uid();
+  if current_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  select id
+  into found_room_id
+  from public.chat_rooms
+  where room_code = upper(trim(target_room_code))
+    and is_group = true
+  limit 1;
+
+  if found_room_id is null then
+    raise exception 'group_not_found';
+  end if;
+
+  insert into public.chat_room_members(room_id, user_id)
+  values (found_room_id, current_uid)
+  on conflict (room_id, user_id) do nothing;
+
+  return found_room_id;
+end;
+$$;
+
+revoke all on function public.join_group_by_code(text) from public;
+grant execute on function public.join_group_by_code(text) to authenticated;
 
 create or replace function public.ensure_direct_room(
   target_user_id uuid,

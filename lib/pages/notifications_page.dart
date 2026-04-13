@@ -5,6 +5,7 @@ import '../models/post_item.dart';
 import '../models/story_item.dart';
 import '../navigation/app_routes.dart';
 import '../services/post_service.dart';
+import '../services/social_service.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/story_ring_avatar.dart';
 import '../widgets/top_bar.dart';
@@ -23,9 +24,11 @@ class NotificationsPage extends StatefulWidget {
 
 class _NotificationsPageState extends State<NotificationsPage> {
   final PostService _postService = PostService();
+  final SocialService _socialService = SocialService();
   final Set<String> _viewedStories = <String>{};
 
   List<PostItem> _notificationPosts = <PostItem>[];
+  Map<String, int> _authorPostCounts = <String, int>{};
   bool _loading = true;
 
   @override
@@ -42,9 +45,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     try {
       final List<PostItem> posts = await _postService.fetchFeed();
+      final Set<String> followingIds = await _socialService.getFollowingIds();
+      final List<PostItem> followedPosts = posts
+          .where((PostItem post) => followingIds.contains(post.authorId))
+          .toList();
+      final Map<String, int> authorPostCounts = <String, int>{};
+      for (final PostItem post in followedPosts) {
+        authorPostCounts[post.authorId] =
+            (authorPostCounts[post.authorId] ?? 0) + 1;
+      }
       if (!mounted) return;
       setState(() {
-        _notificationPosts = posts.take(30).toList();
+        _notificationPosts = followedPosts.take(30).toList();
+        _authorPostCounts = authorPostCounts;
       });
     } catch (_) {
       if (!mounted) return;
@@ -96,8 +109,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   int _streakFromPost(PostItem post) {
-    final int seed = post.id.hashCode.abs();
-    return (seed % 7) + 1;
+    return _authorPostCounts[post.authorId] ?? 0;
   }
 
   @override

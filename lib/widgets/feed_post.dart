@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/post_item.dart';
 import '../models/story_seen_store.dart';
@@ -77,6 +78,7 @@ class _FeedPostState extends State<FeedPost> {
   @override
   Widget build(BuildContext context) {
     final PostItem post = widget.post;
+    final bool isOwnPost = _socialService.currentUser?.id == post.authorId;
     return Container(
       color: const Color(0xFF13151A),
       child: Column(
@@ -314,7 +316,7 @@ class _FeedPostState extends State<FeedPost> {
                       ),
                     ),
                     const Spacer(),
-                    if (post.canApply)
+                    if (post.canApply && !isOwnPost)
                       SizedBox(
                         width: 90,
                         child: AppButton(
@@ -387,6 +389,8 @@ class _FeedPostState extends State<FeedPost> {
     });
     try {
       await _socialService.toggleShare(widget.post.id);
+      if (!mounted) return;
+      await _openShareSheet();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -395,6 +399,74 @@ class _FeedPostState extends State<FeedPost> {
             (_shareCount + (next ? -1 : 1)).clamp(0, 1000000).toInt();
       });
     }
+  }
+
+  Future<void> _openShareSheet() async {
+    final PostItem post = widget.post;
+    final String shareText =
+        'Lihat postingan dari ${post.name} di UNO:\n\n${post.content}';
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF15171D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Bagikan Postingan',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _ShareTile(
+                  icon: Icons.chat_outlined,
+                  title: 'WhatsApp',
+                  subtitle: 'Kirim postingan ke WhatsApp',
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: shareText));
+                    if (!mounted) return;
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Teks postingan disalin. Tempel di WhatsApp.',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                _ShareTile(
+                  icon: Icons.copy_outlined,
+                  title: 'Copy Link',
+                  subtitle: 'Salin teks postingan',
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: shareText));
+                    if (!mounted) return;
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Teks postingan berhasil disalin.'),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _addComment() async {
@@ -701,6 +773,62 @@ class _Dot extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: active ? Colors.white : const Color(0xFFB7B7B7),
+      ),
+    );
+  }
+}
+
+class _ShareTile extends StatelessWidget {
+  const _ShareTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F1013),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF2D313B)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white70, size: 20),
+          ],
+        ),
       ),
     );
   }

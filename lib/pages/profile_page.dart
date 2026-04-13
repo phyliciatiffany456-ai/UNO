@@ -13,7 +13,6 @@ import '../widgets/bottom_nav.dart';
 import '../widgets/expandable_text.dart';
 import '../widgets/profile_ring_avatar.dart';
 import '../widgets/top_bar.dart';
-import 'community_page.dart';
 import 'create_post_page.dart';
 import 'create_short_page.dart';
 import 'notifications_page.dart';
@@ -21,6 +20,7 @@ import 'post_zoom_page.dart';
 import 'profile_connections_page.dart';
 import 'profile_dashboard_page.dart';
 import 'profile_edit_page.dart';
+import 'profile_video_feed_page.dart';
 import 'search_page.dart';
 import 'story_viewer_page.dart';
 
@@ -38,7 +38,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool _viewedProfileStory = false;
   bool _loading = true;
-  _ProfileTab _activeTab = _ProfileTab.grid;
+  _ProfileTab _activeTab = _ProfileTab.all;
   List<PostItem> _myPosts = <PostItem>[];
   String _displayName = 'User';
   String _bio = 'Belum ada bio.';
@@ -264,12 +264,23 @@ class _ProfilePageState extends State<ProfilePage> {
                       Row(
                         children: [
                           Expanded(
-                            child: _TabIcon(
-                              icon: Icons.grid_on_rounded,
-                              active: _activeTab == _ProfileTab.grid,
+                            child: _TabText(
+                              label: 'All',
+                              active: _activeTab == _ProfileTab.all,
                               onTap: () {
                                 setState(() {
-                                  _activeTab = _ProfileTab.grid;
+                                  _activeTab = _ProfileTab.all;
+                                });
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: _TabText(
+                              label: 'Postingan',
+                              active: _activeTab == _ProfileTab.post,
+                              onTap: () {
+                                setState(() {
+                                  _activeTab = _ProfileTab.post;
                                 });
                               },
                             ),
@@ -296,16 +307,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               },
                             ),
                           ),
-                          Expanded(
-                            child: _TabIcon(
-                              icon: Icons.groups_2_outlined,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const CommunityPage(),
-                                ),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -319,6 +320,12 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                         )
+                      else if (_activeTab == _ProfileTab.job)
+                        Column(
+                          children: visiblePosts
+                              .map((PostItem post) => _JobPostCard(post: post))
+                              .toList(),
+                        )
                       else
                         Wrap(
                           spacing: 4,
@@ -326,11 +333,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           children: visiblePosts.map((PostItem post) {
                             final bool hasImage = post.imageUrls.isNotEmpty;
                             return InkWell(
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => PostZoomPage(post: post),
-                                ),
-                              ),
+                              onTap: () => _openProfilePost(visiblePosts, post),
                               child: SizedBox(
                                 width: tileWidth,
                                 height: tileWidth * 1.2,
@@ -470,17 +473,49 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _openProfilePost(
+    List<PostItem> visiblePosts,
+    PostItem post,
+  ) async {
+    if (_activeTab == _ProfileTab.video) {
+      final int initialIndex = visiblePosts.indexWhere(
+        (PostItem item) => item.id == post.id,
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ProfileVideoFeedPage(
+            posts: visiblePosts,
+            initialIndex: initialIndex < 0 ? 0 : initialIndex,
+          ),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PostZoomPage(post: post),
+      ),
+    );
+  }
+
   List<PostItem> _filteredPosts() {
     switch (_activeTab) {
+      case _ProfileTab.all:
+        return _myPosts.where((PostItem post) => post.type != PostType.job).toList();
+      case _ProfileTab.post:
+        return _myPosts
+            .where(
+              (PostItem post) =>
+                  post.type != PostType.job && !_isVideoPost(post),
+            )
+            .toList();
       case _ProfileTab.video:
         return _myPosts.where(_isVideoPost).toList();
       case _ProfileTab.job:
         return _myPosts
             .where((PostItem post) => post.type == PostType.job)
             .toList();
-      case _ProfileTab.grid:
-      default:
-        return _myPosts;
     }
   }
 
@@ -495,7 +530,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-enum _ProfileTab { grid, video, job }
+enum _ProfileTab { all, post, video, job }
 
 class _ProfileStat extends StatelessWidget {
   const _ProfileStat({required this.label, required this.value, this.onTap});
@@ -567,6 +602,114 @@ class _TabIcon extends StatelessWidget {
           icon,
           color: active ? Colors.white : const Color(0xFF9CA3AF),
           size: 20,
+        ),
+      ),
+    );
+  }
+}
+
+class _TabText extends StatelessWidget {
+  const _TabText({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: active ? Colors.white : const Color(0xFF3A3D46),
+              width: 1.2,
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? Colors.white : const Color(0xFF9CA3AF),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JobPostCard extends StatelessWidget {
+  const _JobPostCard({required this.post});
+
+  final PostItem post;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => PostZoomPage(post: post))),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF13151A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF24262E)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                post.jobTitle ?? post.content,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              if ((post.jobLocation ?? '').isNotEmpty)
+                Text(
+                  'Lokasi: ${post.jobLocation}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              if ((post.jobDomicile ?? '').isNotEmpty)
+                Text(
+                  'Domisili: ${post.jobDomicile}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              if ((post.jobRequirements ?? '').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Kriteria: ${post.jobRequirements}',
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ),
+              const SizedBox(height: 6),
+              Text(
+                post.content,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white60, fontSize: 11),
+              ),
+            ],
+          ),
         ),
       ),
     );

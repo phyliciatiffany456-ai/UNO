@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../models/cv_store.dart';
 import '../models/post_item.dart';
+import '../pages/chat_box_page.dart';
+import '../services/chat_service.dart';
 import '../services/job_application_service.dart';
 import '../widgets/app_button.dart';
 
@@ -17,6 +19,7 @@ class JobApplyPage extends StatefulWidget {
 
 class _JobApplyPageState extends State<JobApplyPage> {
   final JobApplicationService _applicationService = JobApplicationService();
+  final ChatService _chatService = ChatService();
 
   bool _submitted = false;
   bool _uploadingCv = false;
@@ -310,6 +313,47 @@ class _JobApplyPageState extends State<JobApplyPage> {
     JobApplicationRecord record,
     String status,
   ) async {
+    if (status == 'accepted') {
+      final _AcceptanceFormResult? acceptance = await _showAcceptanceDialog(
+        record,
+      );
+      if (acceptance == null) return;
+
+      try {
+        await _applicationService.updateApplicationStatus(
+          applicationId: record.id,
+          status: status,
+          reviewerNote: _encodeQuestions(acceptance.questions),
+        );
+        await _applicationService.scheduleInterview(
+          applicationId: record.id,
+          interviewType: 'onsite',
+          interviewLocation: acceptance.location,
+          interviewAt: acceptance.interviewAt,
+        );
+        final String roomId = await _chatService.ensureDirectRoomWithUser(
+          otherUserId: record.applicantId,
+          otherUserName: record.applicantName,
+        );
+        await _chatService.sendMessage(
+          roomId: roomId,
+          content: _buildAcceptanceChatMessage(
+            applicantName: record.applicantName,
+            location: acceptance.location,
+            interviewAt: acceptance.interviewAt,
+            questions: acceptance.questions,
+          ),
+        );
+        await _loadApplications();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal update status: $error')),
+        );
+      }
+      return;
+    }
+
     try {
       await _applicationService.updateApplicationStatus(
         applicationId: record.id,
@@ -326,6 +370,354 @@ class _JobApplyPageState extends State<JobApplyPage> {
           : 'Gagal update status: $error';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
+      );
+    }
+  }
+
+  Future<_AcceptanceFormResult?> _showAcceptanceDialog(
+    JobApplicationRecord record,
+  ) async {
+    final TextEditingController locationController = TextEditingController(
+      text: record.interviewLocation ?? '',
+    );
+    final TextEditingController dateController = TextEditingController(
+      text: record.interviewAt != null
+          ? _formatInterviewDate(record.interviewAt!)
+          : '',
+    );
+    final TextEditingController questionsController = TextEditingController(
+      text: _decodeQuestions(record.reviewerNote).join('\n'),
+    );
+
+    DateTime? selectedDate = record.interviewAt;
+
+    final _AcceptanceFormResult? result =
+        await showDialog<_AcceptanceFormResult>(
+          context: context,
+          builder: (BuildContext dialogContext) {
+            return StatefulBuilder(
+              builder: (BuildContext context, StateSetter setDialogState) {
+                Future<void> pickInterviewDate() async {
+                  final DateTime now = DateTime.now();
+                  final DateTime initialDate =
+                      selectedDate != null && !selectedDate!.isBefore(now)
+                      ? selectedDate!
+                      : now.add(const Duration(days: 1));
+                  final DateTime? pickedDate = await showDatePicker(
+                    context: dialogContext,
+                    initialDate: initialDate,
+                    firstDate: DateTime(now.year, now.month, now.day),
+                    lastDate: DateTime(now.year + 3),
+                  );
+                  if (pickedDate == null) return;
+
+                  final TimeOfDay initialTime = selectedDate != null
+                      ? TimeOfDay.fromDateTime(selectedDate!)
+                      : const TimeOfDay(hour: 9, minute: 0);
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: dialogContext,
+                    initialTime: initialTime,
+                  );
+                  if (pickedTime == null) return;
+
+                  final DateTime combined = DateTime(
+                    pickedDate.year,
+                    pickedDate.month,
+                    pickedDate.day,
+                    pickedTime.hour,
+                    pickedTime.minute,
+                  );
+                  setDialogState(() {
+                    selectedDate = combined;
+                    dateController.text = _formatInterviewDate(combined);
+                  });
+                }
+
+                return AlertDialog(
+                  backgroundColor: const Color(0xFF13151A),
+                  title: Text(
+                    'Accept ${record.applicantName}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildDialogField(
+                          controller: locationController,
+                          label: 'Tempat interview',
+                          hintText: 'Contoh: Kantor UNO Jakarta',
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDialogField(
+                          controller: dateController,
+                          label: 'Tanggal interview',
+                          hintText: 'Pilih tanggal dan jam',
+                          readOnly: true,
+                          onTap: pickInterviewDate,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDialogField(
+                          controller: questionsController,
+                          label: 'Pertanyaan untuk pelamar',
+                          hintText:
+                              'Satu pertanyaan per baris.\nContoh:\nCeritakan pengalaman Anda.\nKenapa tertarik di posisi ini?',
+                          maxLines: 5,
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text(
+                        'Batal',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        final String location = locationController.text.trim();
+                        final List<String> questions = questionsController.text
+                            .split('\n')
+                            .map((String line) => line.trim())
+                            .where((String line) => line.isNotEmpty)
+                            .toList();
+
+                        if (location.isEmpty || selectedDate == null) {
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Tempat dan tanggal interview wajib diisi.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        if (questions.isEmpty) {
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Isi minimal satu pertanyaan untuk pelamar.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        Navigator.of(dialogContext).pop(
+                          _AcceptanceFormResult(
+                            location: location,
+                            interviewAt: selectedDate!,
+                            questions: questions,
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Simpan'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+
+    locationController.dispose();
+    dateController.dispose();
+    questionsController.dispose();
+    return result;
+  }
+
+  Widget _buildDialogField({
+    required TextEditingController controller,
+    required String label,
+    required String hintText,
+    int maxLines = 1,
+    bool readOnly = false,
+    VoidCallback? onTap,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          readOnly: readOnly,
+          onTap: onTap,
+          maxLines: maxLines,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: const TextStyle(color: Colors.white38),
+            filled: true,
+            fillColor: const Color(0xFF0F1013),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF2D313B)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF22C55E)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _encodeQuestions(List<String> questions) {
+    return questions.join('\n');
+  }
+
+  List<String> _decodeQuestions(String? note) {
+    if (note == null || note.trim().isEmpty) return const <String>[];
+    return note
+        .split('\n')
+        .map((String line) => line.trim())
+        .where((String line) => line.isNotEmpty)
+        .toList();
+  }
+
+  String _formatInterviewDate(DateTime value) {
+    final String day = value.day.toString().padLeft(2, '0');
+    final String month = value.month.toString().padLeft(2, '0');
+    final String hour = value.hour.toString().padLeft(2, '0');
+    final String minute = value.minute.toString().padLeft(2, '0');
+    return '$day/$month/${value.year} $hour:$minute';
+  }
+
+  List<Widget> _acceptedDetails(JobApplicationRecord? record) {
+    if (record == null) return const <Widget>[];
+
+    final List<Widget> details = <Widget>[];
+    if (record.interviewLocation != null &&
+        record.interviewLocation!.trim().isNotEmpty) {
+      details.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            'Tempat: ${record.interviewLocation!}',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+        ),
+      );
+    }
+    if (record.interviewAt != null) {
+      details.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            'Tanggal: ${_formatInterviewDate(record.interviewAt!)}',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final List<String> questions = _decodeQuestions(record.reviewerNote);
+    if (questions.isNotEmpty) {
+      details.add(
+        const Padding(
+          padding: EdgeInsets.only(top: 2, bottom: 6),
+          child: Text(
+            'Pertanyaan untuk pelamar:',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+      for (int index = 0; index < questions.length; index++) {
+        details.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              '${index + 1}. ${questions[index]}',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return details;
+  }
+
+  String _buildAcceptanceChatMessage({
+    required String applicantName,
+    required String location,
+    required DateTime interviewAt,
+    required List<String> questions,
+  }) {
+    final StringBuffer buffer = StringBuffer()
+      ..writeln('Halo $applicantName, aplikasi kamu diterima untuk lanjut ke tahap interview.')
+      ..writeln('Tempat: $location')
+      ..writeln('Tanggal: ${_formatInterviewDate(interviewAt)}')
+      ..writeln('Pertanyaan yang perlu kamu siapkan:');
+
+    for (int index = 0; index < questions.length; index++) {
+      buffer.writeln('${index + 1}. ${questions[index]}');
+    }
+
+    buffer.write('Silakan balas chat ini kalau ada yang ingin ditanyakan.');
+    return buffer.toString();
+  }
+
+  Future<void> _openDirectChat({
+    required String otherUserId,
+    required String otherUserName,
+    required String roomTitle,
+  }) async {
+    try {
+      final String roomId = await _chatService.ensureDirectRoomWithUser(
+        otherUserId: otherUserId,
+        otherUserName: otherUserName,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ChatBoxPage(
+            initialRoomId: roomId,
+            roomTitle: roomTitle,
+            isGroupRoom: false,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal membuka chat: $error')),
       );
     }
   }
@@ -486,6 +878,22 @@ class _JobApplyPageState extends State<JobApplyPage> {
                                     ),
                                   ],
                                 ),
+                                if (item.status == 'accepted') ...[
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: AppButton(
+                                      label: 'Chat Pelamar',
+                                      onTap: () => _openDirectChat(
+                                        otherUserId: item.applicantId,
+                                        otherUserName: item.applicantName,
+                                        roomTitle: 'HR - ${item.applicantName}',
+                                      ),
+                                      height: 34,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           );
@@ -613,6 +1021,25 @@ class _JobApplyPageState extends State<JobApplyPage> {
                             ),
                           ),
                         ),
+                        if ((_myApplication?.status ?? '') == 'accepted')
+                          ..._acceptedDetails(_myApplication),
+                        if ((_myApplication?.status ?? '') == 'accepted' &&
+                            !_isOwner) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: AppButton(
+                              label: 'Chat HR',
+                              onTap: () => _openDirectChat(
+                                otherUserId: widget.post.authorId,
+                                otherUserName: widget.post.name,
+                                roomTitle: 'HR - ${widget.post.name}',
+                              ),
+                              height: 38,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                     ],
                   ),
           ),
@@ -627,4 +1054,16 @@ class _JobApplyPageState extends State<JobApplyPage> {
       ),
     );
   }
+}
+
+class _AcceptanceFormResult {
+  const _AcceptanceFormResult({
+    required this.location,
+    required this.interviewAt,
+    required this.questions,
+  });
+
+  final String location;
+  final DateTime interviewAt;
+  final List<String> questions;
 }
