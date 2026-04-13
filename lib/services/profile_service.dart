@@ -113,8 +113,11 @@ class ProfileService {
 
   Future<String> uploadMyAvatar(XFile file) async {
     final User user = _requireUser();
-    final Uint8List bytes = await file.readAsBytes();
     final String extension = _extension(file.name);
+    if (!_isAllowedAvatarExtension(extension)) {
+      throw Exception('Format foto profil harus PNG, JPG, atau JPEG.');
+    }
+    final Uint8List bytes = await file.readAsBytes();
     final String path =
         '${user.id}/avatar-${DateTime.now().millisecondsSinceEpoch}-${_random.nextInt(100000)}$extension';
     await _client.storage.from('avatars').uploadBinary(
@@ -186,10 +189,15 @@ class ProfileService {
     switch (ext) {
       case '.png':
         return 'image/png';
-      case '.webp':
-        return 'image/webp';
-      default:
+      case '.jpg':
+      case '.jpeg':
         return 'image/jpeg';
+      default:
+        throw Exception('Format foto profil harus PNG, JPG, atau JPEG.');
     }
+  }
+
+  bool _isAllowedAvatarExtension(String ext) {
+    return ext == '.png' || ext == '.jpg' || ext == '.jpeg';
   }
 }

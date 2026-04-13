@@ -45,18 +45,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     try {
       final List<PostItem> posts = await _postService.fetchFeed();
-      final Set<String> followingIds = await _socialService.getFollowingIds();
-      final List<PostItem> followedPosts = posts
-          .where((PostItem post) => followingIds.contains(post.authorId))
+      final String? currentUserId = _socialService.currentUser?.id;
+      final List<PostItem> notificationPosts = posts
+          .where((PostItem post) => post.authorId != currentUserId)
           .toList();
       final Map<String, int> authorPostCounts = <String, int>{};
-      for (final PostItem post in followedPosts) {
+      for (final PostItem post in notificationPosts) {
         authorPostCounts[post.authorId] =
             (authorPostCounts[post.authorId] ?? 0) + 1;
       }
       if (!mounted) return;
       setState(() {
-        _notificationPosts = followedPosts.take(30).toList();
+        _notificationPosts = notificationPosts.take(30).toList();
         _authorPostCounts = authorPostCounts;
       });
     } catch (_) {
@@ -253,6 +253,7 @@ class _NotificationTile extends StatelessWidget {
             StoryRingProfileAvatar(
               size: 34,
               viewed: viewedStory,
+              label: username,
               onTap: onAvatarTap,
             ),
             const SizedBox(width: 8),

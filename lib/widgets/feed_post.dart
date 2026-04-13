@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/post_item.dart';
+import '../models/saved_post_store.dart';
 import '../models/story_seen_store.dart';
 import '../pages/chat_profile_info_page.dart';
 import '../models/story_item.dart';
 import '../pages/job_apply_page.dart';
+import '../pages/saved_posts_page.dart';
 import '../pages/story_viewer_page.dart';
 import '../services/social_service.dart';
 import 'app_button.dart';
@@ -13,9 +15,14 @@ import 'expandable_text.dart';
 import 'pop_icon_button.dart';
 
 class FeedPost extends StatefulWidget {
-  const FeedPost({super.key, required this.post});
+  const FeedPost({
+    super.key,
+    required this.post,
+    this.openSavedPageOnSave = true,
+  });
 
   final PostItem post;
+  final bool openSavedPageOnSave;
 
   @override
   State<FeedPost> createState() => _FeedPostState();
@@ -32,6 +39,7 @@ class _FeedPostState extends State<FeedPost> {
   bool _liked = false;
   bool _commented = false;
   bool _shared = false;
+  bool _saved = false;
   int _currentImageIndex = 0;
 
   void _openOwnerProfile(PostItem post) {
@@ -73,6 +81,7 @@ class _FeedPostState extends State<FeedPost> {
     _shareCount = widget.post.shareCount;
     _liked = widget.post.isLiked;
     _shared = widget.post.isShared;
+    _saved = SavedPostStore.contains(widget.post.id);
   }
 
   @override
@@ -283,12 +292,13 @@ class _FeedPostState extends State<FeedPost> {
                   onTap: _toggleShare,
                 ),
                 const Spacer(),
-                const PopIconButton(
-                  icon: Icons.bookmark_border,
-                  activeIcon: Icons.bookmark,
+                PopIconButton(
+                  icon: _saved ? Icons.bookmark : Icons.bookmark_border,
                   color: Colors.white,
-                  activeColor: Color(0xFFF4A640),
+                  activeColor: const Color(0xFFF4A640),
                   size: 18,
+                  toggle: false,
+                  onTap: (_) => _savePost(),
                 ),
               ],
             ),
@@ -399,6 +409,22 @@ class _FeedPostState extends State<FeedPost> {
             (_shareCount + (next ? -1 : 1)).clamp(0, 1000000).toInt();
       });
     }
+  }
+
+  Future<void> _savePost() async {
+    SavedPostStore.save(widget.post);
+    if (!mounted) return;
+    setState(() {
+      _saved = true;
+    });
+    if (!widget.openSavedPageOnSave) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SavedPostsPage()),
+    );
+    if (!mounted) return;
+    setState(() {
+      _saved = SavedPostStore.contains(widget.post.id);
+    });
   }
 
   Future<void> _openShareSheet() async {
@@ -710,17 +736,40 @@ class _FeedPostState extends State<FeedPost> {
               shape: BoxShape.circle,
               color: Color(0xFF0F1013),
             ),
-            child: const Center(
-              child: CircleAvatar(
-                radius: 8,
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person, size: 10, color: Color(0xFF121417)),
+            child: Center(
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _avatarInitials(post.name),
+                  style: const TextStyle(
+                    color: Color(0xFF121417),
+                    fontSize: 7,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  String _avatarInitials(String raw) {
+    final List<String> words = raw
+        .split(' ')
+        .map((String word) => word.trim())
+        .where((String word) => word.isNotEmpty)
+        .toList();
+    if (words.isEmpty) return 'U';
+    if (words.length == 1) return words.first.substring(0, 1).toUpperCase();
+    return '${words.first[0]}${words[1][0]}'.toUpperCase();
   }
 }
 

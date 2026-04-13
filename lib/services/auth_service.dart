@@ -1,10 +1,15 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'account_switch_service.dart';
+
 class AuthService {
   AuthService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+      : _client = client ?? Supabase.instance.client,
+        _accountSwitchService =
+            AccountSwitchService(client: client ?? Supabase.instance.client);
 
   final SupabaseClient _client;
+  final AccountSwitchService _accountSwitchService;
 
   User? get currentUser => _client.auth.currentUser;
 
@@ -12,7 +17,11 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    await _client.auth.signInWithPassword(email: email, password: password);
+    await _client.auth.signInWithPassword(
+      email: _normalizeEmail(email),
+      password: password,
+    );
+    await _accountSwitchService.registerCurrentSession();
   }
 
   Future<void> signUp({
@@ -21,12 +30,13 @@ class AuthService {
     required String fullName,
   }) async {
     await _client.auth.signUp(
-      email: email,
+      email: _normalizeEmail(email),
       password: password,
       data: <String, dynamic>{
         'full_name': fullName,
       },
     );
+    await _accountSwitchService.registerCurrentSession(displayName: fullName);
   }
 
   Future<void> signOut() async {
@@ -40,7 +50,7 @@ class AuthService {
     final dynamic result = await _client.rpc(
       'prototype_reset_password_by_email',
       params: <String, dynamic>{
-        'target_email': email,
+        'target_email': _normalizeEmail(email),
         'new_password': newPassword,
       },
     );
@@ -55,10 +65,14 @@ class AuthService {
     required String newPassword,
   }) async {
     await _client.auth.signInWithPassword(
-      email: email,
+      email: _normalizeEmail(email),
       password: oldPassword,
     );
     await _client.auth.updateUser(UserAttributes(password: newPassword));
     await _client.auth.signOut();
+  }
+
+  String _normalizeEmail(String email) {
+    return email.trim().toLowerCase();
   }
 }

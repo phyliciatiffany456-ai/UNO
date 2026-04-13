@@ -6,6 +6,8 @@ import '../models/cv_store.dart';
 import '../models/story_item.dart';
 import '../navigation/app_routes.dart';
 import '../models/post_item.dart';
+import '../services/account_switch_service.dart';
+import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/post_service.dart';
 import '../services/social_service.dart';
@@ -28,6 +30,8 @@ class ProfileEditPage extends StatefulWidget {
 }
 
 class _ProfileEditPageState extends State<ProfileEditPage> {
+  final AuthService _authService = AuthService();
+  final AccountSwitchService _accountSwitchService = AccountSwitchService();
   final ProfileService _profileService = ProfileService();
   final PostService _postService = PostService();
   final SocialService _socialService = SocialService();
@@ -42,6 +46,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   String _selectedGender = 'Perempuan';
   bool _viewedProfileStory = false;
   bool _loading = true;
+  bool _switchingAccount = false;
   int _postCount = 0;
   int _followerCount = 0;
   int _followingCount = 0;
@@ -62,6 +67,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     });
     try {
       final ProfileRecord profile = await _profileService.fetchMyProfile();
+      await _accountSwitchService.registerCurrentSession(
+        displayName: profile.fullName,
+        avatarUrl: profile.avatarUrl,
+      );
       if (!mounted) return;
       setState(() {
         _nameController.text = profile.fullName;
@@ -228,6 +237,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         role: role,
         avatarUrl: _avatarUrl,
       );
+      await _accountSwitchService.registerCurrentSession(
+        displayName: name.isEmpty ? null : name,
+        avatarUrl: _avatarUrl,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -252,20 +265,143 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       imageQuality: 85,
     );
     if (file == null) return;
+    if (!_isAllowedAvatarFile(file.name)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Foto profil hanya boleh PNG, JPG, atau JPEG.'),
+        ),
+      );
+      return;
+    }
     try {
       final String url = await _profileService.uploadMyAvatar(file);
       if (!mounted) return;
       setState(() {
         _avatarUrl = url;
       });
+      await _accountSwitchService.registerCurrentSession(
+        displayName: _nameController.text.trim(),
+        avatarUrl: url,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Foto profil berhasil diubah.')),
       );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  bool _isAllowedAvatarFile(String fileName) {
+    final String lower = fileName.trim().toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg');
+  }
+
+  Future<void> _logout() async {
+    try {
+      await _authService.signOut();
+      if (!mounted) return;
+      AppRoutes.goLogin(context);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal upload foto profil.')),
+        const SnackBar(content: Text('Gagal logout. Coba lagi.')),
       );
+    }
+  }
+
+  Future<void> _openAccountSwitcher() async {
+    final List<KnownAccount> accounts =
+        await _accountSwitchService.loadKnownAccounts();
+    if (!mounted) return;
+
+    if (accounts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Belum ada akun lain yang pernah login di perangkat ini.'),
+        ),
+      );
+      return;
+    }
+
+    final String? currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF15171D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ganti Akun',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...accounts.map((KnownAccount account) {
+                  final bool isCurrent = account.userId == currentUserId;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _KnownAccountTile(
+                      account: account,
+                      isCurrent: isCurrent,
+                      disabled: _switchingAccount,
+                      onTap: () async {
+                        if (isCurrent || _switchingAccount) {
+                          Navigator.of(sheetContext).pop();
+                          return;
+                        }
+                        Navigator.of(sheetContext).pop();
+                        await _switchToAccount(account);
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _switchToAccount(KnownAccount account) async {
+    setState(() {
+      _switchingAccount = true;
+    });
+    try {
+      await _accountSwitchService.switchToAccount(account);
+      if (!mounted) return;
+      AppRoutes.goHome(context);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Gagal ganti akun. Coba login ulang ke akun tersebut sekali lagi.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _switchingAccount = false;
+        });
+      }
     }
   }
 
@@ -420,6 +556,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               fontSize: 13,
             ),
             const SizedBox(height: 8),
+            _menuAction(
+              'Ubah Foto Profil (PNG, JPG, JPEG)',
+              icon: Icons.photo_camera_outlined,
+              onTap: _changePhoto,
+            ),
+            const SizedBox(height: 6),
             ValueListenableBuilder<String?>(
               valueListenable: CvStore.fileName,
               builder: (BuildContext context, String? value, Widget? child) {
@@ -435,10 +577,14 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             _menuAction(
               'LogOut',
               icon: Icons.chevron_right,
-              onTap: () => AppRoutes.goLogin(context),
+              onTap: _logout,
             ),
             const SizedBox(height: 6),
-            _menuAction('Ganti Akun', icon: Icons.chevron_right, onTap: () {}),
+            _menuAction(
+              _switchingAccount ? 'Mengganti Akun...' : 'Ganti Akun',
+              icon: Icons.chevron_right,
+              onTap: _switchingAccount ? () {} : _openAccountSwitcher,
+            ),
             ],
           ],
         ),
@@ -722,6 +868,78 @@ class _MiniStat extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KnownAccountTile extends StatelessWidget {
+  const _KnownAccountTile({
+    required this.account,
+    required this.isCurrent,
+    required this.disabled,
+    required this.onTap,
+  });
+
+  final KnownAccount account;
+  final bool isCurrent;
+  final bool disabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: disabled ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F1013),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isCurrent ? const Color(0xFFFF6A2D) : const Color(0xFF2D313B),
+          ),
+        ),
+        child: Row(
+          children: [
+            ProfileRingAvatar(
+              label: account.displayName,
+              viewed: false,
+              hasStory: false,
+              size: 42,
+              imageUrl: account.avatarUrl,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    account.displayName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    account.email,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              isCurrent ? 'Dipakai' : 'Pilih',
+              style: TextStyle(
+                color: isCurrent ? const Color(0xFFFF6A2D) : Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],

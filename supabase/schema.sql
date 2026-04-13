@@ -627,17 +627,34 @@ alter table public.chat_rooms enable row level security;
 alter table public.chat_room_members enable row level security;
 alter table public.chat_messages enable row level security;
 
+create or replace function public.is_chat_room_member(
+  target_room_id uuid,
+  target_user_id uuid default auth.uid()
+)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.chat_room_members m
+    where m.room_id = target_room_id
+      and m.user_id = target_user_id
+  );
+$$;
+
+revoke all on function public.is_chat_room_member(uuid, uuid) from public;
+grant execute on function public.is_chat_room_member(uuid, uuid) to authenticated;
+
 drop policy if exists "Members can read rooms" on public.chat_rooms;
 create policy "Members can read rooms"
 on public.chat_rooms
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.chat_room_members m
-    where m.room_id = id and m.user_id = auth.uid()
-  )
+  public.is_chat_room_member(id, auth.uid())
 );
 
 drop policy if exists "Authenticated can create rooms" on public.chat_rooms;
@@ -654,11 +671,7 @@ for select
 to authenticated
 using (
   user_id = auth.uid()
-  or exists (
-    select 1
-    from public.chat_room_members m
-    where m.room_id = chat_room_members.room_id and m.user_id = auth.uid()
-  )
+  or public.is_chat_room_member(room_id, auth.uid())
 );
 
 drop policy if exists "Users can join self to room" on public.chat_room_members;
@@ -915,11 +928,7 @@ on public.chat_messages
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.chat_room_members m
-    where m.room_id = chat_messages.room_id and m.user_id = auth.uid()
-  )
+  public.is_chat_room_member(chat_messages.room_id, auth.uid())
 );
 
 drop policy if exists "Members can send messages" on public.chat_messages;
@@ -929,11 +938,7 @@ for insert
 to authenticated
 with check (
   sender_id = auth.uid()
-  and exists (
-    select 1
-    from public.chat_room_members m
-    where m.room_id = chat_messages.room_id and m.user_id = auth.uid()
-  )
+  and public.is_chat_room_member(chat_messages.room_id, auth.uid())
 );
 
 -- =========================

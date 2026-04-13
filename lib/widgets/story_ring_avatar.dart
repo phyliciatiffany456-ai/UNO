@@ -51,11 +51,13 @@ class StoryRingProfileAvatar extends StatelessWidget {
     super.key,
     this.size = 34,
     this.viewed = false,
+    this.label = 'User',
     this.onTap,
   });
 
   final double size;
   final bool viewed;
+  final String label;
   final VoidCallback? onTap;
 
   @override
@@ -76,18 +78,37 @@ class StoryRingProfileAvatar extends StatelessWidget {
             color: Color(0xFF0F1013),
           ),
           child: Center(
-            child: CircleAvatar(
-              radius: profileRadius,
-              backgroundColor: const Color(0xFFE5E7EB),
-              child: Icon(
-                Icons.person,
-                size: iconSize,
-                color: const Color(0xFF121417),
+            child: Container(
+              width: profileSize,
+              height: profileSize,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFE5E7EB),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                _initials(label),
+                style: TextStyle(
+                  color: const Color(0xFF121417),
+                  fontSize: iconSize * 0.52,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  String _initials(String raw) {
+    final List<String> words = raw
+        .split(' ')
+        .map((String word) => word.trim())
+        .where((String word) => word.isNotEmpty)
+        .toList();
+    if (words.isEmpty) return 'U';
+    if (words.length == 1) return words.first.substring(0, 1).toUpperCase();
+    return '${words.first[0]}${words[1][0]}'.toUpperCase();
   }
 }
