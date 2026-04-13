@@ -25,6 +25,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
   bool _uploadingCv = false;
   bool _loadingApplications = false;
   bool _loadingMyApplication = false;
+  String? _processingApplicationId;
   List<JobApplicationRecord> _applications = <JobApplicationRecord>[];
   JobApplicationRecord? _myApplication;
 
@@ -270,9 +271,11 @@ class _JobApplyPageState extends State<JobApplyPage> {
     required String label,
     required String targetStatus,
     required String currentStatus,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    bool isProcessing = false,
   }) {
     final bool isActive = currentStatus == targetStatus;
+    final bool enabled = !isActive && !isProcessing && onTap != null;
     final Color activeColor = _statusActionColor(targetStatus);
     return Expanded(
       child: SizedBox(
@@ -281,11 +284,13 @@ class _JobApplyPageState extends State<JobApplyPage> {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
-            onTap: isActive ? null : onTap,
+            onTap: enabled ? onTap : null,
             child: Ink(
               decoration: BoxDecoration(
                 color: isActive
                     ? activeColor.withOpacity(0.22)
+                    : isProcessing
+                    ? const Color(0xFF1A1D24)
                     : const Color(0xFF0E1014),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
@@ -294,7 +299,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
               ),
               child: Center(
                 child: Text(
-                  label,
+                  isProcessing ? 'Saving...' : label,
                   style: TextStyle(
                     color: isActive ? activeColor : Colors.white,
                     fontSize: 11,
@@ -313,11 +318,17 @@ class _JobApplyPageState extends State<JobApplyPage> {
     JobApplicationRecord record,
     String status,
   ) async {
+    if (_processingApplicationId != null) return;
+
     if (status == 'accepted') {
       final _AcceptanceFormResult? acceptance = await _showAcceptanceDialog(
         record,
       );
       if (acceptance == null) return;
+
+      setState(() {
+        _processingApplicationId = record.id;
+      });
 
       try {
         await _applicationService.updateApplicationStatus(
@@ -331,28 +342,54 @@ class _JobApplyPageState extends State<JobApplyPage> {
           interviewLocation: acceptance.location,
           interviewAt: acceptance.interviewAt,
         );
-        final String roomId = await _chatService.ensureDirectRoomWithUser(
-          otherUserId: record.applicantId,
-          otherUserName: record.applicantName,
-        );
-        await _chatService.sendMessage(
-          roomId: roomId,
-          content: _buildAcceptanceChatMessage(
-            applicantName: record.applicantName,
-            location: acceptance.location,
-            interviewAt: acceptance.interviewAt,
-            questions: acceptance.questions,
-          ),
-        );
         await _loadApplications();
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Kandidat berhasil di-accept.')));
+
+        try {
+          final String roomId = await _chatService.ensureDirectRoomWithUser(
+            otherUserId: record.applicantId,
+            otherUserName: record.applicantName,
+          );
+          await _chatService.sendMessage(
+            roomId: roomId,
+            content: _buildAcceptanceChatMessage(
+              applicantName: record.applicantName,
+              location: acceptance.location,
+              interviewAt: acceptance.interviewAt,
+              questions: acceptance.questions,
+            ),
+          );
+        } catch (chatError) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Status tersimpan, tapi gagal kirim chat interview: $chatError',
+              ),
+            ),
+          );
+        }
       } catch (error) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal update status: $error')),
         );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _processingApplicationId = null;
+          });
+        }
       }
       return;
     }
+
+    setState(() {
+      _processingApplicationId = record.id;
+    });
 
     try {
       await _applicationService.updateApplicationStatus(
@@ -371,6 +408,12 @@ class _JobApplyPageState extends State<JobApplyPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingApplicationId = null;
+        });
+      }
     }
   }
 
@@ -799,6 +842,8 @@ class _JobApplyPageState extends State<JobApplyPage> {
                         const SizedBox(height: 10),
                         ..._applications.map((JobApplicationRecord item) {
                           final Color statusColor = _statusColor(item.status);
+                          final bool isProcessing =
+                              _processingApplicationId == item.id;
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(10),
@@ -859,22 +904,35 @@ class _JobApplyPageState extends State<JobApplyPage> {
                                       label: 'Review',
                                       targetStatus: 'under_review',
                                       currentStatus: item.status,
-                                      onTap: () =>
-                                          _updateStatus(item, 'under_review'),
+                                      isProcessing: isProcessing,
+                                      onTap: isProcessing
+                                          ? null
+                                          : () => _updateStatus(
+                                              item,
+                                              'under_review',
+                                            ),
                                     ),
                                     const SizedBox(width: 6),
                                     _statusActionButton(
                                       label: 'Accept',
                                       targetStatus: 'accepted',
                                       currentStatus: item.status,
-                                      onTap: () => _updateStatus(item, 'accepted'),
+                                      isProcessing: isProcessing,
+                                      onTap: isProcessing
+                                          ? null
+                                          : () =>
+                                              _updateStatus(item, 'accepted'),
                                     ),
                                     const SizedBox(width: 6),
                                     _statusActionButton(
                                       label: 'Reject',
                                       targetStatus: 'rejected',
                                       currentStatus: item.status,
-                                      onTap: () => _updateStatus(item, 'rejected'),
+                                      isProcessing: isProcessing,
+                                      onTap: isProcessing
+                                          ? null
+                                          : () =>
+                                              _updateStatus(item, 'rejected'),
                                     ),
                                   ],
                                 ),

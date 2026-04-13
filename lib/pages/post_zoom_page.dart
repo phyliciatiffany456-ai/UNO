@@ -30,18 +30,16 @@ class _PostZoomPageState extends State<PostZoomPage> {
               )
             : ListView(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
-                children: [
-                  FeedPost(post: zoomPost),
-                ],
+                children: [FeedPost(post: zoomPost, hasStory: false)],
               ),
       ),
       bottomNavigationBar: BottomNav(
         currentTab: NavTab.profile,
         onHomeTap: () => AppRoutes.goHome(context),
         onApplyTap: () => AppRoutes.goApply(context),
-        onCreateTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const CreatePostPage()),
-        ),
+        onCreateTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage())),
         onCommunityTap: () => AppRoutes.goCommunity(context),
         onProfileTap: () => AppRoutes.goProfile(context),
       ),

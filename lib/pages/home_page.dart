@@ -30,6 +30,7 @@ class _HomePageState extends State<HomePage> {
   final SocialService _socialService = SocialService();
   List<StoryItem> stories = <StoryItem>[];
   List<PostItem> _posts = <PostItem>[];
+  Set<String> _usersWithStory = <String>{};
   bool _loadingPosts = true;
 
   @override
@@ -52,17 +53,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _openCreatePage() {
-    Navigator.of(
-      context,
-    )
+    Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage()))
         .then((_) => _loadFeed());
   }
 
   void _openCreateShortPage() {
-    Navigator.of(
-      context,
-    )
+    Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => const CreateShortPage()))
         .then((_) => _loadFeed());
   }
@@ -97,21 +94,34 @@ class _HomePageState extends State<HomePage> {
     try {
       final List<PostItem> posts = await _postService.fetchFeed();
       if (!mounted) return;
-      final DateTime? latestPostAt = posts.isNotEmpty ? posts.first.createdAt : null;
-      final String? latestAuthorId = posts.isNotEmpty ? posts.first.authorId : null;
+
+      final DateTime? latestPostAt = posts.isNotEmpty
+          ? posts.first.createdAt
+          : null;
+      final String? latestAuthorId = posts.isNotEmpty
+          ? posts.first.authorId
+          : null;
+
       NotificationStore.syncWithLatestPost(
         latestPostAt,
         latestAuthorId: latestAuthorId,
         currentUserId: user.id,
       );
+
       final Set<String> followingIds = await _socialService.getFollowingIds();
+
+      final builtStories = _buildStories(
+        posts,
+        currentUserId: user.id,
+        followingIds: followingIds,
+      );
+
+      final usersWithStory = builtStories.map((s) => s.authorId).toSet();
+
       setState(() {
         _posts = posts;
-        stories = _buildStories(
-          posts,
-          currentUserId: user.id,
-          followingIds: followingIds,
-        );
+        stories = builtStories;
+        _usersWithStory = usersWithStory;
       });
     } catch (_) {
       _showMessage('Gagal memuat feed dari database.');
@@ -148,8 +158,10 @@ class _HomePageState extends State<HomePage> {
         final bool bMine = b.authorId == currentUserId;
         if (aMine && !bMine) return -1;
         if (!aMine && bMine) return 1;
-        final DateTime aCreatedAt = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final DateTime bCreatedAt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final DateTime aCreatedAt =
+            a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final DateTime bCreatedAt =
+            b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         return bCreatedAt.compareTo(aCreatedAt);
       });
 
@@ -170,9 +182,9 @@ class _HomePageState extends State<HomePage> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -210,10 +222,14 @@ class _HomePageState extends State<HomePage> {
                       child: ListView.separated(
                         physics: const AlwaysScrollableScrollPhysics(),
                         itemBuilder: (BuildContext context, int index) {
-                          return FeedPost(post: _posts[index]);
+                          final PostItem post = _posts[index];
+                          return FeedPost(
+                            post: post,
+                            hasStory: _usersWithStory.contains(post.authorId),
+                          );
                         },
                         separatorBuilder: (BuildContext context, int index) =>
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 14),
                         itemCount: _posts.length,
                       ),
                     ),

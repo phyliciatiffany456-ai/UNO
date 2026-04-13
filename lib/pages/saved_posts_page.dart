@@ -20,71 +20,69 @@ class SavedPostsPage extends StatelessWidget {
       body: SafeArea(
         child: ValueListenableBuilder<List<PostItem>>(
           valueListenable: SavedPostStore.savedPosts,
-          builder: (
-            BuildContext context,
-            List<PostItem> savedPosts,
-            Widget? child,
-          ) {
-            if (savedPosts.isEmpty) {
-              return const Center(
-                child: Text(
-                  'Belum ada post yang disimpan.',
-                  style: TextStyle(color: Colors.white70),
-                ),
-              );
-            }
+          builder:
+              (BuildContext context, List<PostItem> savedPosts, Widget? child) {
+                if (savedPosts.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'Belum ada post yang disimpan.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  );
+                }
 
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
-              itemCount: savedPosts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (BuildContext context, int index) {
-                final PostItem post = savedPosts[index];
-                return Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF13151A),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF24262E)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      FeedPost(
-                        post: post,
-                        openSavedPageOnSave: false,
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+                  itemCount: savedPosts.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (BuildContext context, int index) {
+                    final PostItem post = savedPosts[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF13151A),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF24262E)),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        child: TextButton.icon(
-                          onPressed: () {
-                            SavedPostStore.remove(post.id);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Post dihapus dari Save.'),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.undo_rounded,
-                            color: Color(0xFFF4A640),
-                            size: 18,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          FeedPost(
+                            post: post,
+                            hasStory: false,
+                            openSavedPageOnSave: false,
                           ),
-                          label: const Text(
-                            'Undo Save',
-                            style: TextStyle(
-                              color: Color(0xFFF4A640),
-                              fontWeight: FontWeight.w700,
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                            child: TextButton.icon(
+                              onPressed: () {
+                                SavedPostStore.remove(post.id);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Post dihapus dari Save.'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.undo_rounded,
+                                color: Color(0xFFF4A640),
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'Undo Save',
+                                style: TextStyle(
+                                  color: Color(0xFFF4A640),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
-            );
-          },
         ),
       ),
       bottomNavigationBar: BottomNav(

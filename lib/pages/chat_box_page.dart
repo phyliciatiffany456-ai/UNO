@@ -30,17 +30,25 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
   final TextEditingController _controller = TextEditingController();
   String? _roomId;
   String? _roomError;
+  Stream<List<ChatMessageItem>>? _messageStream;
+  List<ChatMessageItem> _cachedMessages = <ChatMessageItem>[];
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_refreshInputState);
     if (widget.initialRoomId != null) {
-      _roomId = widget.initialRoomId;
-      _roomError = null;
+      _bindRoom(widget.initialRoomId!);
     } else {
       _setupRoom();
     }
+  }
+
+  void _bindRoom(String roomId) {
+    _roomId = roomId;
+    _roomError = null;
+    _cachedMessages = <ChatMessageItem>[];
+    _messageStream = _chatService.watchMessages(roomId);
   }
 
   Future<void> _setupRoom() async {
@@ -48,8 +56,7 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
       final String roomId = await _chatService.ensureGlobalCommunityRoom();
       if (!mounted) return;
       setState(() {
-        _roomId = roomId;
-        _roomError = null;
+        _bindRoom(roomId);
       });
     } catch (e) {
       if (!mounted) return;
@@ -173,7 +180,7 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                     const SizedBox(height: 14),
                     SizedBox(
                       height: 280,
-                      child: _roomId == null
+                      child: _roomId == null || _messageStream == null
                           ? Center(
                               child: _roomError == null
                                   ? const CircularProgressIndicator()
@@ -197,13 +204,15 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                                     ),
                             )
                           : StreamBuilder<List<ChatMessageItem>>(
-                              stream: _chatService.watchMessages(_roomId!),
+                              stream: _messageStream!,
+                              initialData: _cachedMessages,
                               builder: (
                                 BuildContext context,
                                 AsyncSnapshot<List<ChatMessageItem>> snapshot,
                               ) {
                                 final List<ChatMessageItem> messages =
                                     snapshot.data ?? <ChatMessageItem>[];
+                                _cachedMessages = messages;
                                 final String myId =
                                     _chatService.currentUser?.id ?? '';
                                 return ListView.builder(

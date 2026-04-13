@@ -18,10 +18,12 @@ class FeedPost extends StatefulWidget {
   const FeedPost({
     super.key,
     required this.post,
+    required this.hasStory,
     this.openSavedPageOnSave = true,
   });
 
   final PostItem post;
+  final bool hasStory;
   final bool openSavedPageOnSave;
 
   @override
@@ -89,17 +91,24 @@ class _FeedPostState extends State<FeedPost> {
     final PostItem post = widget.post;
     final bool isOwnPost = _socialService.currentUser?.id == post.authorId;
     return Container(
-      color: const Color(0xFF13151A),
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13151A),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF24262E)),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _storyAvatar,
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,17 +122,18 @@ class _FeedPostState extends State<FeedPost> {
                             post.name,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
+                              fontSize: 13,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         post.role,
                         style: const TextStyle(
                           color: Color(0xFF9BA0A6),
-                          fontSize: 9,
+                          fontSize: 11,
                         ),
                       ),
                     ],
@@ -234,22 +244,23 @@ class _FeedPostState extends State<FeedPost> {
                     },
                     itemBuilder: (BuildContext context, int index) {
                       final String imageUrl = post.imageUrls[index];
+
                       return Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (
-                          BuildContext context,
-                          Object error,
-                          StackTrace? stackTrace,
-                        ) =>
-                            Container(
-                          color: const Color(0xFFCFCFCF),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.broken_image_outlined,
-                            color: Color(0xFF4B5563),
-                          ),
-                        ),
+                        errorBuilder:
+                            (
+                              BuildContext context,
+                              Object error,
+                              StackTrace? stackTrace,
+                            ) => Container(
+                              color: const Color(0xFFCFCFCF),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.broken_image_outlined,
+                                color: Color(0xFF4B5563),
+                              ),
+                            ),
                       );
                     },
                   ),
@@ -303,61 +314,48 @@ class _FeedPostState extends State<FeedPost> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () => _openOwnerProfile(post),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Text(
-                          post.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+          if (post.canApply && !isOwnPost)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      post.jobTitle?.trim().isNotEmpty == true
+                          ? post.jobTitle!
+                          : post.role,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF9CA3AF),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const Spacer(),
-                    if (post.canApply && !isOwnPost)
-                      SizedBox(
-                        width: 90,
-                        child: AppButton(
-                          label: 'Apply',
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => JobApplyPage(post: post),
-                              ),
-                            );
-                          },
-                          height: 34,
-                          fontSize: 12,
-                          borderRadius: 10,
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                ExpandableText(
-                  text: post.content,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    color: Color(0xFF9CA3AF),
-                    fontSize: 9,
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
+                  const SizedBox(width: 10),
+                  if (post.canApply && !isOwnPost)
+                    SizedBox(
+                      width: 90,
+                      child: AppButton(
+                        label: 'Apply',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => JobApplyPage(post: post),
+                            ),
+                          );
+                        },
+                        height: 34,
+                        fontSize: 12,
+                        borderRadius: 10,
+                      ),
+                    ),
+                ],
+              ),
+            )
+          else
+            const SizedBox(height: 8),
         ],
       ),
     );
@@ -394,8 +392,7 @@ class _FeedPostState extends State<FeedPost> {
     final bool next = !_shared;
     setState(() {
       _shared = next;
-      _shareCount =
-          (_shareCount + (next ? 1 : -1)).clamp(0, 1000000).toInt();
+      _shareCount = (_shareCount + (next ? 1 : -1)).clamp(0, 1000000).toInt();
     });
     try {
       await _socialService.toggleShare(widget.post.id);
@@ -405,8 +402,7 @@ class _FeedPostState extends State<FeedPost> {
       if (!mounted) return;
       setState(() {
         _shared = !next;
-        _shareCount =
-            (_shareCount + (next ? -1 : 1)).clamp(0, 1000000).toInt();
+        _shareCount = (_shareCount + (next ? -1 : 1)).clamp(0, 1000000).toInt();
       });
     }
   }
@@ -418,9 +414,9 @@ class _FeedPostState extends State<FeedPost> {
       _saved = true;
     });
     if (!widget.openSavedPageOnSave) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SavedPostsPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const SavedPostsPage()));
     if (!mounted) return;
     setState(() {
       _saved = SavedPostStore.contains(widget.post.id);
@@ -676,16 +672,19 @@ class _FeedPostState extends State<FeedPost> {
       final int imageIndex = windowStart + i;
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: _Dot(active: imageIndex == _currentImageIndex || i == activeDotIndex),
+        child: _Dot(
+          active: imageIndex == _currentImageIndex || i == activeDotIndex,
+        ),
       );
     });
   }
 
   Widget get _storyAvatar {
     final PostItem post = widget.post;
-    final bool withStoryRing = post.hasStory;
+    final bool withStoryRing = widget.hasStory;
+
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       onTap: withStoryRing
           ? () async {
               await Navigator.of(context).push(
@@ -699,7 +698,10 @@ class _FeedPostState extends State<FeedPost> {
                   ),
                 ),
               );
-              StorySeenStore.markSeen(authorId: post.authorId, label: post.name);
+              StorySeenStore.markSeen(
+                authorId: post.authorId,
+                label: post.name,
+              );
               if (!mounted) return;
               setState(() {
                 _isStoryViewed = true;
@@ -707,8 +709,8 @@ class _FeedPostState extends State<FeedPost> {
             }
           : null,
       child: Container(
-        width: 24,
-        height: 24,
+        width: 32,
+        height: 32,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: withStoryRing
@@ -726,20 +728,22 @@ class _FeedPostState extends State<FeedPost> {
                         end: Alignment.bottomRight,
                       ))
               : null,
-          color: withStoryRing ? null : Colors.white,
+          color: withStoryRing ? null : const Color(0xFF6B7280),
         ),
         child: Center(
           child: Container(
-            width: 20,
-            height: 20,
-            decoration: const BoxDecoration(
+            width: withStoryRing ? 28 : 32,
+            height: withStoryRing ? 28 : 32,
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Color(0xFF0F1013),
+              color: withStoryRing
+                  ? const Color(0xFF0F1013)
+                  : Colors.transparent,
             ),
             child: Center(
               child: Container(
-                width: 16,
-                height: 16,
+                width: 22,
+                height: 22,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.white,
@@ -749,7 +753,7 @@ class _FeedPostState extends State<FeedPost> {
                   _avatarInitials(post.name),
                   style: const TextStyle(
                     color: Color(0xFF121417),
-                    fontSize: 7,
+                    fontSize: 9,
                     fontWeight: FontWeight.w800,
                   ),
                 ),

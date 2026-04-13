@@ -55,7 +55,7 @@ class _ProfileVideoFeedPageState extends State<ProfileVideoFeedPage> {
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
                     children: [
-                      FeedPost(post: widget.posts[index]),
+                      FeedPost(post: widget.posts[index], hasStory: false),
                     ],
                   );
                 },
