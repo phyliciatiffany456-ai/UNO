@@ -116,12 +116,9 @@ class _HomePageState extends State<HomePage> {
         followingIds: followingIds,
       );
 
-      final usersWithStory = builtStories.map((s) => s.authorId).toSet();
-
       setState(() {
         _posts = posts;
         stories = builtStories;
-        _usersWithStory = usersWithStory;
       });
     } catch (_) {
       _showMessage('Gagal memuat feed dari database.');
