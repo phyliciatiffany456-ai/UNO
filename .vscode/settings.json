@@ -1,4 +1,5 @@
 {
+  "dart.defaultLaunchConfiguration": "UNO (Chrome)",
   "dart.flutterRunAdditionalArgs": [
     "--dart-define-from-file=.vscode/supabase.local.json"
   ]

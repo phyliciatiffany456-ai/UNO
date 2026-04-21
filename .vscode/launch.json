@@ -5,7 +5,11 @@
       "name": "UNO (Chrome)",
       "request": "launch",
       "type": "dart",
-      "deviceId": "chrome"
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "args": [
+        "--dart-define-from-file=.vscode/supabase.local.json"
+      ]
     }
   ]
 }
