@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,12 +9,12 @@ import '../navigation/app_routes.dart';
 import '../models/post_item.dart';
 import '../services/account_switch_service.dart';
 import '../services/auth_service.dart';
+import '../services/job_application_service.dart';
 import '../services/profile_service.dart';
 import '../services/post_service.dart';
 import '../services/social_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
-import '../widgets/expandable_text.dart';
 import '../widgets/profile_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
@@ -33,6 +34,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   final AuthService _authService = AuthService();
   final AccountSwitchService _accountSwitchService = AccountSwitchService();
   final ProfileService _profileService = ProfileService();
+  final JobApplicationService _jobApplicationService = JobApplicationService();
   final PostService _postService = PostService();
   final SocialService _socialService = SocialService();
   final ImagePicker _imagePicker = ImagePicker();
@@ -47,11 +49,15 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   bool _viewedProfileStory = false;
   bool _loading = true;
   bool _switchingAccount = false;
+  bool _uploadingCv = false;
   int _postCount = 0;
   int _followerCount = 0;
   int _followingCount = 0;
   bool _hasActiveStory = false;
   String? _avatarUrl;
+  String? _cvFileName;
+  String? _cvStoragePath;
+  String? _cvPublicUrl;
 
   @override
   void initState() {
@@ -81,20 +87,30 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         _selectedPronoun = profile.pronoun;
         _selectedGender = profile.gender;
         _avatarUrl = profile.avatarUrl;
+        _cvFileName = profile.cvFileName;
+        _cvStoragePath = profile.cvStoragePath;
+        _cvPublicUrl = profile.cvPublicUrl;
       });
+      if (profile.cvFileName != null) {
+        CvStore.setCv(
+          name: profile.cvFileName!,
+          path: profile.cvStoragePath,
+          url: profile.cvPublicUrl,
+        );
+      } else {
+        CvStore.clear();
+      }
       final String? userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId != null) {
         final List<PostItem> posts = await _postService.fetchFeed();
-        final Map<String, int> followStats = await _socialService.getFollowStats(
-          userId,
-        );
+        final Map<String, int> followStats = await _socialService
+            .getFollowStats(userId);
         if (!mounted) return;
         final DateTime threshold = DateTime.now().subtract(
           const Duration(days: 1),
         );
         setState(() {
-          _postCount =
-              posts.where((PostItem p) => p.authorId == userId).length;
+          _postCount = posts.where((PostItem p) => p.authorId == userId).length;
           _followerCount = followStats['followers'] ?? 0;
           _followingCount = followStats['following'] ?? 0;
           _hasActiveStory = posts.any(
@@ -148,56 +164,66 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
   }
 
-  Future<void> _showUploadCvSheet() async {
-    final String? picked = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: const Color(0xFF15171D),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Pilih Format CV',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _CvPickerTile(
-                  label: 'PDF',
-                  example: 'Tiffany_CV.pdf',
-                  onTap: () => Navigator.of(context).pop('Tiffany_CV.pdf'),
-                ),
-                const SizedBox(height: 8),
-                _CvPickerTile(
-                  label: 'DOCX',
-                  example: 'Tiffany_CV.docx',
-                  onTap: () => Navigator.of(context).pop('Tiffany_CV.docx'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  Future<void> _pickAndUploadCv() async {
+    setState(() {
+      _uploadingCv = true;
+    });
 
-    if (picked == null) return;
-    CvStore.setCv(name: picked);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('CV berhasil di-upload: $picked'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    try {
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: <String>['pdf', 'doc', 'docx'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final PlatformFile file = result.files.first;
+      final CvUploadResult uploaded = await _jobApplicationService.uploadCv(
+        file,
+      );
+      await _profileService.upsertMyProfile(
+        fullName: _nameController.text.trim(),
+        bio: _bioController.text.trim(),
+        pronoun: _selectedPronoun,
+        gender: _selectedGender,
+        education: _educationController.text.trim(),
+        workExperience: _workController.text.trim(),
+        role: _roleController.text.trim(),
+        avatarUrl: _avatarUrl,
+        cvFileName: uploaded.fileName,
+        cvStoragePath: uploaded.storagePath,
+        cvPublicUrl: uploaded.publicUrl,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _cvFileName = uploaded.fileName;
+        _cvStoragePath = uploaded.storagePath;
+        _cvPublicUrl = uploaded.publicUrl;
+      });
+      CvStore.setCv(
+        name: uploaded.fileName,
+        path: uploaded.storagePath,
+        url: uploaded.publicUrl,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('CV berhasil di-upload: ${uploaded.fileName}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal upload CV: $error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingCv = false;
+        });
+      }
+    }
   }
 
   Future<void> _openProfileStory() async {
@@ -210,6 +236,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           story: StoryItem(
             label: label,
             authorId: Supabase.instance.client.auth.currentUser?.id,
+            avatarUrl: _avatarUrl,
           ),
         ),
       ),
@@ -236,6 +263,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         workExperience: work,
         role: role,
         avatarUrl: _avatarUrl,
+        cvFileName: _cvFileName,
+        cvStoragePath: _cvStoragePath,
+        cvPublicUrl: _cvPublicUrl,
       );
       await _accountSwitchService.registerCurrentSession(
         displayName: name.isEmpty ? null : name,
@@ -276,6 +306,16 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     }
     try {
       final String url = await _profileService.uploadMyAvatar(file);
+      await _profileService.upsertMyProfile(
+        fullName: _nameController.text.trim(),
+        bio: _bioController.text.trim(),
+        pronoun: _selectedPronoun,
+        gender: _selectedGender,
+        education: _educationController.text.trim(),
+        workExperience: _workController.text.trim(),
+        role: _roleController.text.trim(),
+        avatarUrl: url,
+      );
       if (!mounted) return;
       setState(() {
         _avatarUrl = url;
@@ -291,7 +331,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
       );
     }
   }
@@ -310,21 +352,23 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       AppRoutes.goLogin(context);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal logout. Coba lagi.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gagal logout. Coba lagi.')));
     }
   }
 
   Future<void> _openAccountSwitcher() async {
-    final List<KnownAccount> accounts =
-        await _accountSwitchService.loadKnownAccounts();
+    final List<KnownAccount> accounts = await _accountSwitchService
+        .loadKnownAccounts();
     if (!mounted) return;
 
     if (accounts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Belum ada akun lain yang pernah login di perangkat ini.'),
+          content: Text(
+            'Belum ada akun lain yang pernah login di perangkat ini.',
+          ),
         ),
       );
       return;
@@ -433,160 +477,101 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                 child: Center(child: CircularProgressIndicator()),
               )
             else ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _EditAvatar(
-                  label: _nameController.text.isEmpty
-                      ? 'User'
-                      : _nameController.text,
-                  viewed: _viewedProfileStory,
-                  hasStory: _hasActiveStory,
-                  imageUrl: _avatarUrl,
-                  onTap: _hasActiveStory ? _openProfileStory : null,
-                  onAddTap: _changePhoto,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _nameController.text.isEmpty
-                            ? 'User'
-                            : _nameController.text,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _MiniStat(label: 'Postingan', value: '$_postCount'),
-                          _MiniStat(
-                            label: 'Pengikut',
-                            value: '$_followerCount',
-                            onTap: () =>
-                                _openConnections(ConnectionTab.followers),
-                          ),
-                          _MiniStat(
-                            label: 'Mengikuti',
-                            value: '$_followingCount',
-                            onTap: () =>
-                                _openConnections(ConnectionTab.following),
-                          ),
-                        ],
-                      ),
-                    ],
+              const SizedBox(height: 8),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'Edit Profile',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: ExpandableText(
-                text:
-                    _bioController.text.isEmpty ? 'Belum ada bio.' : _bioController.text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontStyle: FontStyle.italic,
-                ),
-                maxLines: 1,
               ),
-            ),
-            const SizedBox(height: 10),
-            _EditTextField(
-              label: 'Nama',
-              controller: _nameController,
-            ),
-            const SizedBox(height: 6),
-            _EditDropdownField(
-              label: 'Kata Ganti',
-              value: _selectedPronoun,
-              items: const <String>['Ms.', 'Mr.', 'Mrs'],
-              onChanged: (String value) {
-                setState(() {
-                  _selectedPronoun = value;
-                });
-              },
-            ),
-            const SizedBox(height: 6),
-            _EditTextField(
-              label: 'Bio',
-              controller: _bioController,
-              minLines: 2,
-              maxLines: 3,
-            ),
-            const SizedBox(height: 6),
-            _EditDropdownField(
-              label: 'Jenis Kelamin',
-              value: _selectedGender,
-              items: const <String>['Laki-laki', 'Perempuan'],
-              onChanged: (String value) {
-                setState(() {
-                  _selectedGender = value;
-                });
-              },
-            ),
-            const SizedBox(height: 6),
-            _EditTextField(
-              label: 'Pendidikan',
-              controller: _educationController,
-            ),
-            const SizedBox(height: 6),
-            _EditTextField(
-              label: 'Pengalaman Kerja',
-              controller: _workController,
-            ),
-            const SizedBox(height: 6),
-            _EditTextField(
-              label: 'Role',
-              controller: _roleController,
-            ),
-            const SizedBox(height: 10),
-            AppButton(
-              label: 'Simpan Perubahan',
-              onTap: _saveProfile,
-              height: 40,
-              fontSize: 13,
-            ),
-            const SizedBox(height: 8),
-            _menuAction(
-              'Ubah Foto Profil (PNG, JPG, JPEG)',
-              icon: Icons.photo_camera_outlined,
-              onTap: _changePhoto,
-            ),
-            const SizedBox(height: 6),
-            ValueListenableBuilder<String?>(
-              valueListenable: CvStore.fileName,
-              builder: (BuildContext context, String? value, Widget? child) {
-                final bool hasCv = value != null;
-                return _menuAction(
-                  hasCv ? 'Curriculum Vitae ($value)' : 'Curriculum Vitae',
-                  icon: hasCv ? Icons.check_circle_outline : Icons.upload_file,
-                  onTap: _showUploadCvSheet,
-                );
-              },
-            ),
-            const SizedBox(height: 6),
-            _menuAction(
-              'LogOut',
-              icon: Icons.chevron_right,
-              onTap: _logout,
-            ),
-            const SizedBox(height: 6),
-            _menuAction(
-              _switchingAccount ? 'Mengganti Akun...' : 'Ganti Akun',
-              icon: Icons.chevron_right,
-              onTap: _switchingAccount ? () {} : _openAccountSwitcher,
-            ),
+              const SizedBox(height: 10),
+              _EditTextField(label: 'Nama', controller: _nameController),
+              const SizedBox(height: 6),
+              _EditDropdownField(
+                label: 'Kata Ganti',
+                value: _selectedPronoun,
+                items: const <String>['Ms.', 'Mr.', 'Mrs'],
+                onChanged: (String value) {
+                  setState(() {
+                    _selectedPronoun = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 6),
+              _EditTextField(
+                label: 'Bio',
+                controller: _bioController,
+                minLines: 2,
+                maxLines: 3,
+              ),
+              const SizedBox(height: 6),
+              _EditDropdownField(
+                label: 'Jenis Kelamin',
+                value: _selectedGender,
+                items: const <String>['Laki-laki', 'Perempuan'],
+                onChanged: (String value) {
+                  setState(() {
+                    _selectedGender = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 6),
+              _EditTextField(
+                label: 'Pendidikan',
+                controller: _educationController,
+              ),
+              const SizedBox(height: 6),
+              _EditTextField(
+                label: 'Pengalaman Kerja',
+                controller: _workController,
+              ),
+              const SizedBox(height: 6),
+              _EditTextField(label: 'Role', controller: _roleController),
+              const SizedBox(height: 10),
+              AppButton(
+                label: 'Simpan Perubahan',
+                onTap: _saveProfile,
+                height: 40,
+                fontSize: 13,
+              ),
+              const SizedBox(height: 8),
+              _menuAction(
+                'Ubah Foto Profil (PNG, JPG, JPEG)',
+                icon: Icons.photo_camera_outlined,
+                onTap: _changePhoto,
+              ),
+              const SizedBox(height: 6),
+              ValueListenableBuilder<String?>(
+                valueListenable: CvStore.fileName,
+                builder: (BuildContext context, String? value, Widget? child) {
+                  final bool hasCv = value != null;
+                  return _menuAction(
+                    _uploadingCv
+                        ? 'Uploading CV...'
+                        : (hasCv
+                              ? 'Curriculum Vitae ($value)'
+                              : 'Curriculum Vitae'),
+                    icon: hasCv
+                        ? Icons.check_circle_outline
+                        : Icons.upload_file,
+                    onTap: _uploadingCv ? () {} : _pickAndUploadCv,
+                  );
+                },
+              ),
+              const SizedBox(height: 6),
+              _menuAction('LogOut', icon: Icons.chevron_right, onTap: _logout),
+              const SizedBox(height: 6),
+              _menuAction(
+                _switchingAccount ? 'Mengganti Akun...' : 'Ganti Akun',
+                icon: Icons.chevron_right,
+                onTap: _switchingAccount ? () {} : _openAccountSwitcher,
+              ),
             ],
           ],
         ),
@@ -681,7 +666,10 @@ class _EditTextField extends StatelessWidget {
             cursorColor: const Color(0xFFFF6A2D),
             decoration: const InputDecoration(
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 10,
+              ),
               filled: true,
               fillColor: Color(0xFF0E1014),
               border: OutlineInputBorder(
@@ -793,7 +781,11 @@ class _CvPickerTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.description_outlined, color: Colors.white, size: 18),
+            const Icon(
+              Icons.description_outlined,
+              color: Colors.white,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -839,46 +831,6 @@ class _EditAvatar extends StatelessWidget {
   );
 }
 
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({required this.label, required this.value, this.onTap});
-
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(6),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _KnownAccountTile extends StatelessWidget {
   const _KnownAccountTile({
     required this.account,
@@ -903,7 +855,9 @@ class _KnownAccountTile extends StatelessWidget {
           color: const Color(0xFF0F1013),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isCurrent ? const Color(0xFFFF6A2D) : const Color(0xFF2D313B),
+            color: isCurrent
+                ? const Color(0xFFFF6A2D)
+                : const Color(0xFF2D313B),
           ),
         ),
         child: Row(

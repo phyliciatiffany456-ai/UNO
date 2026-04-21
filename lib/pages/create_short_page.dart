@@ -52,8 +52,6 @@ class _CreateShortPageState extends State<CreateShortPage> {
         content: caption,
         type: PostType.short,
         accessibility: 'public',
-        hideLikeAndViewCount: true,
-        turnOffCommenting: false,
         images: _image != null ? <XFile>[_image!] : <XFile>[],
       );
       if (!mounted) return;

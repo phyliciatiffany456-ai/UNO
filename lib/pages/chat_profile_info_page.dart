@@ -5,6 +5,7 @@ import '../models/story_item.dart';
 import '../models/story_seen_store.dart';
 import '../services/post_service.dart';
 import '../services/profile_service.dart';
+import '../services/chat_service.dart';
 import '../services/social_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/expandable_text.dart';
@@ -35,6 +36,7 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
   final ProfileService _profileService = ProfileService();
   final PostService _postService = PostService();
   final SocialService _socialService = SocialService();
+  final ChatService _chatService = ChatService();
 
   bool _viewedStory = false;
   bool _following = false;
@@ -73,13 +75,16 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
         targetUserId,
       );
       final List<PostItem> feed = await _postService.fetchFeed();
-      final List<PostItem> posts =
-          feed.where((PostItem p) => p.authorId == targetUserId).toList();
+      final List<PostItem> posts = feed
+          .where((PostItem p) => p.authorId == targetUserId)
+          .toList();
       final Map<String, int> followStats = await _socialService.getFollowStats(
         targetUserId,
       );
       final Set<String> myFollowing = await _socialService.getFollowingIds();
-      final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+      final DateTime threshold = DateTime.now().subtract(
+        const Duration(days: 1),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -121,7 +126,11 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => StoryViewerPage(
-          story: StoryItem(label: _name, authorId: userId),
+          story: StoryItem(
+            label: _name,
+            authorId: userId,
+            avatarUrl: _avatarUrl,
+          ),
         ),
       ),
     );
@@ -156,6 +165,33 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
         _followerCount += next ? -1 : 1;
         if (_followerCount < 0) _followerCount = 0;
       });
+    }
+  }
+
+  Future<void> _openDirectChat() async {
+    final String? targetUserId = widget.userId;
+    if (targetUserId == null) return;
+    try {
+      final String roomId = await _chatService.ensureDirectRoomWithUser(
+        otherUserId: targetUserId,
+        otherUserName: _name,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ChatBoxPage(
+            initialRoomId: roomId,
+            roomTitle: _name,
+            isGroupRoom: false,
+            otherUserId: targetUserId,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal membuka chat: $error')));
     }
   }
 
@@ -300,11 +336,7 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
                     Expanded(
                       child: AppButton(
                         label: 'Chat',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const ChatBoxPage(),
-                          ),
-                        ),
+                        onTap: _openDirectChat,
                         variant: AppButtonVariant.outline,
                         height: 32,
                         fontSize: 12,

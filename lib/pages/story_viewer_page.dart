@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/post_item.dart';
 import '../models/story_item.dart';
 import '../services/post_service.dart';
+import '../services/profile_service.dart';
 import '../widgets/pop_icon_button.dart';
 
 class StoryViewerPage extends StatefulWidget {
@@ -17,8 +18,9 @@ class StoryViewerPage extends StatefulWidget {
 }
 
 class _StoryViewerPageState extends State<StoryViewerPage> {
-  static const Duration _shortDuration = Duration(seconds: 30);
+  static const Duration _shortDuration = Duration(seconds: 8);
   final PostService _postService = PostService();
+  final ProfileService _profileService = ProfileService();
 
   final TextEditingController _replyController = TextEditingController();
   final FocusNode _replyFocusNode = FocusNode();
@@ -31,6 +33,8 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
   Timer? _timer;
   int _currentShort = 0;
   bool _loading = true;
+  String _authorName = 'User';
+  String? _authorAvatarUrl;
 
   @override
   void initState() {
@@ -50,23 +54,41 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
 
   Future<void> _loadShorts() async {
     final String? authorId = widget.story.authorId;
+    final String fallbackName = widget.story.label.trim().isEmpty
+        ? 'User'
+        : widget.story.label.trim();
     if (authorId == null) {
       if (!mounted) return;
       setState(() {
         _shorts = <PostItem>[];
         _loading = false;
+        _authorName = fallbackName;
+        _authorAvatarUrl = widget.story.avatarUrl;
       });
       return;
     }
 
     try {
+      final profile = await _profileService.fetchProfileByUserId(authorId);
       final List<PostItem> shorts = await _postService.fetchShortPostsByAuthor(
         authorId,
       );
       if (!mounted) return;
+      final String resolvedName = shorts.isNotEmpty
+          ? shorts.first.name
+          : (profile?.fullName.trim().isNotEmpty == true
+                ? profile!.fullName
+                : fallbackName);
+      final String? resolvedAvatarUrl = shorts.isNotEmpty
+          ? shorts.first.avatarUrl
+          : profile?.avatarUrl;
       setState(() {
         _shorts = shorts;
         _loading = false;
+        _authorName = resolvedName;
+        _authorAvatarUrl = resolvedAvatarUrl?.trim().isNotEmpty == true
+            ? resolvedAvatarUrl
+            : widget.story.avatarUrl;
       });
       if (shorts.isNotEmpty) {
         _startShortTimer();
@@ -75,23 +97,50 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _authorName = fallbackName;
+        _authorAvatarUrl = widget.story.avatarUrl;
       });
     }
   }
 
   void _startShortTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(_shortDuration, (_) {
+    _timer = Timer(_shortDuration, () {
       if (!mounted) return;
-      if (_shorts.isEmpty || _currentShort >= _shorts.length - 1) {
-        Navigator.of(context).pop();
-        return;
-      }
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOut,
-      );
+      _goToNextShort();
     });
+  }
+
+  void _goToNextShort() {
+    if (_shorts.isEmpty || _currentShort >= _shorts.length - 1) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _goToPreviousShort() {
+    if (_shorts.isEmpty) return;
+    if (_currentShort <= 0) return;
+    _pageController.previousPage(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _handleStoryTap(TapUpDetails details, BoxConstraints constraints) {
+    final double tapX = details.localPosition.dx;
+    final double split = constraints.maxWidth * 0.35;
+    if (tapX <= split) {
+      _goToPreviousShort();
+      return;
+    }
+    if (tapX >= constraints.maxWidth - split) {
+      _goToNextShort();
+    }
   }
 
   void _submitReply() {
@@ -117,18 +166,23 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
               child: Row(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 16,
-                    backgroundColor: Color(0xFFE5E7EB),
-                    child: Icon(
-                      Icons.person,
-                      color: Color(0xFF121417),
-                      size: 18,
-                    ),
+                    backgroundColor: const Color(0xFFE5E7EB),
+                    backgroundImage: _authorAvatarUrl?.isNotEmpty == true
+                        ? NetworkImage(_authorAvatarUrl!)
+                        : null,
+                    child: _authorAvatarUrl?.isNotEmpty == true
+                        ? null
+                        : const Icon(
+                            Icons.person,
+                            color: Color(0xFF121417),
+                            size: 18,
+                          ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    widget.story.label,
+                    _authorName,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
@@ -170,92 +224,115 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
             Expanded(
               child: Stack(
                 children: [
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF1E293B), Color(0xFF334155)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: _loading
-                          ? const Center(child: CircularProgressIndicator())
-                          : _shorts.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'Belum ada short di database.',
-                                style: TextStyle(color: Colors.white70),
-                              ),
-                            )
-                          : PageView.builder(
-                              controller: _pageController,
-                              onPageChanged: (int index) {
-                                setState(() {
-                                  _currentShort = index;
-                                });
-                                _startShortTimer();
-                              },
-                              itemCount: _shorts.length,
-                              itemBuilder: (BuildContext context, int index) {
-                                final PostItem short = _shorts[index];
-                                final String? image = short.imageUrls.isNotEmpty
-                                    ? short.imageUrls.first
-                                    : null;
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    if (image != null)
-                                      Image.network(
-                                        image,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (
-                                          BuildContext context,
-                                          Object error,
-                                          StackTrace? stackTrace,
-                                        ) =>
-                                            const ColoredBox(
-                                          color: Color(0xFF243042),
-                                        ),
-                                      )
-                                    else
-                                      const ColoredBox(color: Color(0xFF243042)),
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                            Colors.black.withValues(alpha: 0.1),
-                                            Colors.black.withValues(alpha: 0.7),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 18,
-                                        ),
-                                        child: Text(
-                                          short.content,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
+                  LayoutBuilder(
+                    builder: (BuildContext context, BoxConstraints constraints) {
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: (TapUpDetails details) =>
+                            _handleStoryTap(details, constraints),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
-                    ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: _loading
+                                ? const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : _shorts.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'Belum ada short di database.',
+                                      style: TextStyle(color: Colors.white70),
+                                    ),
+                                  )
+                                : PageView.builder(
+                                    controller: _pageController,
+                                    onPageChanged: (int index) {
+                                      setState(() {
+                                        _currentShort = index;
+                                      });
+                                      _startShortTimer();
+                                    },
+                                    itemCount: _shorts.length,
+                                    itemBuilder:
+                                        (BuildContext context, int index) {
+                                          final PostItem short = _shorts[index];
+                                          final String? image =
+                                              short.imageUrls.isNotEmpty
+                                              ? short.imageUrls.first
+                                              : null;
+                                          return Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              if (image != null)
+                                                Image.network(
+                                                  image,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (
+                                                        BuildContext context,
+                                                        Object error,
+                                                        StackTrace? stackTrace,
+                                                      ) => const ColoredBox(
+                                                        color: Color(
+                                                          0xFF243042,
+                                                        ),
+                                                      ),
+                                                )
+                                              else
+                                                const ColoredBox(
+                                                  color: Color(0xFF243042),
+                                                ),
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    begin: Alignment.topCenter,
+                                                    end: Alignment.bottomCenter,
+                                                    colors: [
+                                                      Colors.black.withValues(
+                                                        alpha: 0.1,
+                                                      ),
+                                                      Colors.black.withValues(
+                                                        alpha: 0.7,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              Center(
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 18,
+                                                      ),
+                                                  child: Text(
+                                                    short.content,
+                                                    textAlign: TextAlign.center,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 20,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                  ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   Positioned(
                     left: 26,

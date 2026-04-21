@@ -12,9 +12,9 @@ class PostService {
     SupabaseClient? client,
     Random? random,
     SocialService? socialService,
-  })  : _client = client ?? Supabase.instance.client,
-        _random = random ?? Random.secure(),
-        _socialService = socialService ?? SocialService(client: client);
+  }) : _client = client ?? Supabase.instance.client,
+       _random = random ?? Random.secure(),
+       _socialService = socialService ?? SocialService(client: client);
 
   static const String postsTable = 'posts';
   static const String postImagesBucket = 'post-images';
@@ -34,21 +34,25 @@ class PostService {
         .map((Map<String, dynamic> row) => row['author_id'].toString())
         .toSet()
         .toList();
-    final List<String> postIds =
-        rows.map((Map<String, dynamic> row) => row['id'].toString()).toList();
-    final Map<String, PostEngagement> engagements =
-        await _socialService.getPostEngagementMap(postIds);
-    final Set<String> followingIds = await _socialService.getFollowingIds();
+    final List<String> postIds = rows
+        .map((Map<String, dynamic> row) => row['id'].toString())
+        .toList();
+    final Map<String, PostEngagement> engagements = await _safeFetchEngagements(
+      postIds,
+    );
+    final Set<String> followingIds = await _safeFetchFollowingIds();
     final Map<String, Map<String, dynamic>> profilesByAuthorId =
-        await _fetchProfilesByUserId(authorIds);
+        await _safeFetchProfilesByUserId(authorIds);
 
     return rows
-        .map((Map<String, dynamic> row) => _mapPost(
-              row,
-              engagements[row['id'].toString()],
-              followingIds,
-              profilesByAuthorId[row['author_id'].toString()],
-            ))
+        .map(
+          (Map<String, dynamic> row) => _mapPost(
+            row,
+            engagements[row['id'].toString()],
+            followingIds,
+            profilesByAuthorId[row['author_id'].toString()],
+          ),
+        )
         .toList();
   }
 
@@ -64,12 +68,9 @@ class PostService {
         .gte('created_at', oneDayAgo)
         .order('created_at', ascending: true);
     return rows
-        .map((Map<String, dynamic> row) => _mapPost(
-              row,
-              null,
-              <String>{},
-              null,
-            ))
+        .map(
+          (Map<String, dynamic> row) => _mapPost(row, null, <String>{}, null),
+        )
         .toList();
   }
 
@@ -77,9 +78,9 @@ class PostService {
     required String content,
     required PostType type,
     required String accessibility,
-    required bool hideLikeAndViewCount,
-    required bool turnOffCommenting,
     required List<XFile> images,
+    bool hideLikeAndViewCount = false,
+    bool turnOffCommenting = false,
     String? jobTitle,
     String? jobLocation,
     String? jobDomicile,
@@ -92,7 +93,9 @@ class PostService {
     for (final XFile image in images) {
       final String path = _buildStoragePath(user.id, image.name);
       final Uint8List bytes = await image.readAsBytes();
-      await _client.storage.from(postImagesBucket).uploadBinary(
+      await _client.storage
+          .from(postImagesBucket)
+          .uploadBinary(
             path,
             bytes,
             fileOptions: FileOptions(
@@ -150,6 +153,7 @@ class PostService {
       authorId: row['author_id'].toString(),
       name: _displayName(row, profile),
       role: _displayRole(row, profile),
+      avatarUrl: _displayAvatarUrl(profile),
       content: (row['content'] as String?)?.trim() ?? '',
       type: type,
       imageUrls: imageUrls,
@@ -177,22 +181,51 @@ class PostService {
 
     final List<Map<String, dynamic>> rows = await _client
         .from('profiles')
-        .select('user_id,full_name,role')
+        .select('user_id,full_name,role,avatar_url')
         .inFilter('user_id', userIds);
 
     return <String, Map<String, dynamic>>{
-      for (final Map<String, dynamic> row in rows) row['user_id'].toString(): row,
+      for (final Map<String, dynamic> row in rows)
+        row['user_id'].toString(): row,
     };
   }
 
   Future<Map<String, dynamic>?> _fetchProfileByUserId(String userId) async {
     final List<Map<String, dynamic>> rows = await _client
         .from('profiles')
-        .select('user_id,full_name,role')
+        .select('user_id,full_name,role,avatar_url')
         .eq('user_id', userId)
         .limit(1);
     if (rows.isEmpty) return null;
     return rows.first;
+  }
+
+  Future<Map<String, PostEngagement>> _safeFetchEngagements(
+    List<String> postIds,
+  ) async {
+    try {
+      return await _socialService.getPostEngagementMap(postIds);
+    } catch (_) {
+      return <String, PostEngagement>{};
+    }
+  }
+
+  Future<Set<String>> _safeFetchFollowingIds() async {
+    try {
+      return await _socialService.getFollowingIds();
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _safeFetchProfilesByUserId(
+    List<String> userIds,
+  ) async {
+    try {
+      return await _fetchProfilesByUserId(userIds);
+    } catch (_) {
+      return <String, Map<String, dynamic>>{};
+    }
   }
 
   String _displayName(Map<String, dynamic> row, Map<String, dynamic>? profile) {
@@ -221,6 +254,14 @@ class PostService {
     }
 
     return 'Role';
+  }
+
+  String? _displayAvatarUrl(Map<String, dynamic>? profile) {
+    final String? avatarUrl = profile?['avatar_url']?.toString().trim();
+    if (avatarUrl == null || avatarUrl.isEmpty) {
+      return null;
+    }
+    return avatarUrl;
   }
 
   User _requireUser() {
@@ -272,7 +313,8 @@ class PostService {
       return profileName;
     }
 
-    final Map<String, dynamic> metadata = user.userMetadata ?? <String, dynamic>{};
+    final Map<String, dynamic> metadata =
+        user.userMetadata ?? <String, dynamic>{};
     return (metadata['full_name'] as String?)?.trim().isNotEmpty == true
         ? metadata['full_name'].toString()
         : (user.email ?? 'User');
@@ -284,7 +326,8 @@ class PostService {
       return profileRole;
     }
 
-    final Map<String, dynamic> metadata = user.userMetadata ?? <String, dynamic>{};
+    final Map<String, dynamic> metadata =
+        user.userMetadata ?? <String, dynamic>{};
     return (metadata['role'] as String?)?.trim().isNotEmpty == true
         ? metadata['role'].toString()
         : 'Role';

@@ -754,6 +754,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
             initialRoomId: roomId,
             roomTitle: roomTitle,
             isGroupRoom: false,
+            otherUserId: otherUserId,
           ),
         ),
       );

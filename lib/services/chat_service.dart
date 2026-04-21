@@ -5,6 +5,7 @@ class ChatRoomItem {
     required this.id,
     required this.name,
     required this.isGroup,
+    this.roomCode,
     this.memberCount = 0,
     this.createdBy,
   });
@@ -12,6 +13,7 @@ class ChatRoomItem {
   final String id;
   final String name;
   final bool isGroup;
+  final String? roomCode;
   final int memberCount;
   final String? createdBy;
 }
@@ -34,7 +36,7 @@ class ChatMessageItem {
 
 class ChatService {
   ChatService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -44,7 +46,7 @@ class ChatService {
     final User user = _requireUser();
     final List<Map<String, dynamic>> memberRows = await _client
         .from('chat_room_members')
-        .select('room_id,chat_rooms(id,name,is_group,created_by)')
+        .select('room_id,chat_rooms(id,name,is_group,created_by,room_code)')
         .eq('user_id', user.id);
 
     final List<String> roomIds = memberRows
@@ -63,6 +65,9 @@ class ChatService {
             ? room['name'].toString()
             : 'Chat',
         isGroup: room['is_group'] as bool? ?? false,
+        roomCode: (room['room_code'] as String?)?.trim().isNotEmpty == true
+            ? room['room_code'].toString()
+            : null,
         memberCount: memberCounts[roomId] ?? 0,
         createdBy: room['created_by']?.toString(),
       );
@@ -71,8 +76,9 @@ class ChatService {
 
   Future<List<ChatRoomItem>> fetchMyGroupRooms() async {
     final List<ChatRoomItem> rooms = await fetchMyRooms();
-    final List<ChatRoomItem> groups =
-        rooms.where((ChatRoomItem room) => room.isGroup).toList();
+    final List<ChatRoomItem> groups = rooms
+        .where((ChatRoomItem room) => room.isGroup)
+        .toList();
     groups.sort((ChatRoomItem a, ChatRoomItem b) => a.name.compareTo(b.name));
     return groups;
   }
@@ -126,51 +132,35 @@ class ChatService {
     return result.toString();
   }
 
-  Future<String> createGroupRoom({
-    required String name,
-  }) async {
-    final User user = _requireUser();
-    final Map<String, dynamic> created = await _client
-        .from('chat_rooms')
-        .insert(<String, dynamic>{
-          'name': name.trim().isEmpty ? 'Grup Baru' : name.trim(),
-          'is_group': true,
-          'created_by': user.id,
-        })
-        .select('id')
-        .single();
-
-    final String roomId = created['id'].toString();
-    await _client.from('chat_room_members').upsert(<String, dynamic>{
-      'room_id': roomId,
-      'user_id': user.id,
-    }, onConflict: 'room_id,user_id');
-    return roomId;
+  Future<String> createGroupRoom({required String name}) async {
+    _requireUser();
+    final dynamic result = await _client.rpc(
+      'create_group_room',
+      params: <String, dynamic>{
+        'target_room_name': name.trim().isEmpty ? 'Grup Baru' : name.trim(),
+        'member_ids': <String>[],
+      },
+    );
+    return result.toString();
   }
 
   Future<void> joinGroupByCode(String roomCode) async {
-    final User user = _requireUser();
+    _requireUser();
     final String normalizedCode = roomCode.trim();
     if (normalizedCode.isEmpty) {
       throw Exception('Kode grup wajib diisi.');
     }
-
-    final List<Map<String, dynamic>> rooms = await _client
-        .from('chat_rooms')
-        .select('id,is_group')
-        .eq('id', normalizedCode)
-        .limit(1);
-    if (rooms.isEmpty) {
-      throw Exception('Kode grup tidak ditemukan.');
+    try {
+      await _client.rpc(
+        'join_group_by_code',
+        params: <String, dynamic>{'target_room_code': normalizedCode},
+      );
+    } on PostgrestException catch (error) {
+      if (error.message.contains('group_not_found')) {
+        throw Exception('Kode grup tidak ditemukan.');
+      }
+      rethrow;
     }
-    if (rooms.first['is_group'] != true) {
-      throw Exception('Kode ini bukan grup.');
-    }
-
-    await _client.from('chat_room_members').upsert(<String, dynamic>{
-      'room_id': normalizedCode,
-      'user_id': user.id,
-    }, onConflict: 'room_id,user_id');
   }
 
   Future<Map<String, int>> _fetchMemberCounts(List<String> roomIds) async {
@@ -202,8 +192,9 @@ class ChatService {
         .stream(primaryKey: <String>['id'])
         .eq('room_id', roomId)
         .order('created_at')
-        .map((List<Map<String, dynamic>> rows) =>
-            rows.map(_mapMessage).toList());
+        .map(
+          (List<Map<String, dynamic>> rows) => rows.map(_mapMessage).toList(),
+        );
   }
 
   Future<void> sendMessage({
@@ -227,7 +218,8 @@ class ChatService {
       roomId: row['room_id'].toString(),
       senderId: row['sender_id'].toString(),
       content: row['content'].toString(),
-      createdAt: DateTime.tryParse(row['created_at'].toString()) ??
+      createdAt:
+          DateTime.tryParse(row['created_at'].toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0),
     );
   }

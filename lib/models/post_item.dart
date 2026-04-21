@@ -6,6 +6,7 @@ class PostItem {
     required this.authorId,
     required this.name,
     required this.role,
+    this.avatarUrl,
     required this.content,
     required this.type,
     this.imageUrls = const <String>[],
@@ -29,6 +30,7 @@ class PostItem {
   final String authorId;
   final String name;
   final String role;
+  final String? avatarUrl;
   final String content;
   final PostType type;
   final List<String> imageUrls;

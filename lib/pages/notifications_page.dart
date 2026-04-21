@@ -48,20 +48,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
     try {
       final List<PostItem> posts = await _postService.fetchFeed();
       final String? currentUserId = _socialService.currentUser?.id;
-      final Map<String, DateTime> followingSinceByAuthor =
-          await _socialService.getFollowingSinceMap(userId: currentUserId);
+      final Map<String, DateTime> followingSinceByAuthor = await _socialService
+          .getFollowingSinceMap(userId: currentUserId);
       final DateTime storyThreshold = DateTime.now().subtract(
         const Duration(days: 1),
       );
-      final List<PostItem> notificationPosts = posts
-          .where((PostItem post) {
-            if (post.authorId == currentUserId) return false;
-            final DateTime? followedAt = followingSinceByAuthor[post.authorId];
-            final DateTime? createdAt = post.createdAt;
-            if (followedAt == null || createdAt == null) return false;
-            return !createdAt.isBefore(followedAt);
-          })
-          .toList();
+      final List<PostItem> notificationPosts = posts.where((PostItem post) {
+        if (post.authorId == currentUserId) return false;
+        final DateTime? followedAt = followingSinceByAuthor[post.authorId];
+        final DateTime? createdAt = post.createdAt;
+        if (followedAt == null || createdAt == null) return false;
+        return !createdAt.isBefore(followedAt);
+      }).toList();
       final Map<String, int> authorStreaks = PostStreak.buildByAuthor(posts);
       final Set<String> activeStoryAuthors = posts
           .where(
@@ -98,7 +96,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => StoryViewerPage(
-          story: StoryItem(label: post.name, authorId: post.authorId),
+          story: StoryItem(
+            label: post.name,
+            authorId: post.authorId,
+            avatarUrl: post.avatarUrl,
+          ),
         ),
       ),
     );
@@ -182,50 +184,58 @@ class _NotificationsPageState extends State<NotificationsPage> {
                             : RefreshIndicator(
                                 onRefresh: _loadNotifications,
                                 child: ListView.separated(
-                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
                                   itemCount: _notificationPosts.length,
                                   separatorBuilder:
                                       (BuildContext context, int index) =>
-                                      const SizedBox(height: 8),
-                                  itemBuilder: (BuildContext context, int index) {
-                                    final PostItem post = _notificationPosts[index];
-                                    final bool hasStory = _activeStoryAuthors
-                                        .contains(post.authorId);
-                                    return _NotificationTile(
-                                      hasStory: hasStory,
-                                      username: post.name,
-                                      text: _notificationText(post),
-                                      streakDays: _streakFromPost(post),
-                                      viewedStory:
-                                          hasStory &&
-                                          StorySeenStore.isSeen(
-                                            authorId: post.authorId,
-                                            label: post.name,
-                                          ),
-                                      onAvatarTap: hasStory
-                                          ? () => _openStory(post)
-                                          : null,
-                                      onNameTap: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) => ChatProfileInfoPage(
-                                              name: post.name,
-                                              userId: post.authorId,
-                                              role: post.role,
-                                              bio: post.content,
-                                            ),
-                                          ),
+                                          const SizedBox(height: 8),
+                                  itemBuilder:
+                                      (BuildContext context, int index) {
+                                        final PostItem post =
+                                            _notificationPosts[index];
+                                        final bool hasStory =
+                                            _activeStoryAuthors.contains(
+                                              post.authorId,
+                                            );
+                                        return _NotificationTile(
+                                          hasStory: hasStory,
+                                          username: post.name,
+                                          text: _notificationText(post),
+                                          streakDays: _streakFromPost(post),
+                                          viewedStory:
+                                              hasStory &&
+                                              StorySeenStore.isSeen(
+                                                authorId: post.authorId,
+                                                label: post.name,
+                                              ),
+                                          onAvatarTap: hasStory
+                                              ? () => _openStory(post)
+                                              : null,
+                                          avatarUrl: post.avatarUrl,
+                                          onNameTap: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    ChatProfileInfoPage(
+                                                      name: post.name,
+                                                      userId: post.authorId,
+                                                      role: post.role,
+                                                      bio: post.content,
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                          onTap: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute<void>(
+                                                builder: (_) =>
+                                                    PostZoomPage(post: post),
+                                              ),
+                                            );
+                                          },
                                         );
                                       },
-                                      onTap: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) => PostZoomPage(post: post),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
                                 ),
                               ),
                       ),
@@ -257,6 +267,7 @@ class _NotificationTile extends StatelessWidget {
     required this.streakDays,
     required this.viewedStory,
     required this.onAvatarTap,
+    this.avatarUrl,
     required this.onNameTap,
     required this.onTap,
   });
@@ -267,6 +278,7 @@ class _NotificationTile extends StatelessWidget {
   final int? streakDays;
   final bool viewedStory;
   final VoidCallback? onAvatarTap;
+  final String? avatarUrl;
   final VoidCallback onNameTap;
   final VoidCallback onTap;
 
@@ -289,6 +301,7 @@ class _NotificationTile extends StatelessWidget {
               hasStory: hasStory,
               viewed: viewedStory,
               label: username,
+              imageUrl: avatarUrl,
               onTap: onAvatarTap,
             ),
             const SizedBox(width: 8),

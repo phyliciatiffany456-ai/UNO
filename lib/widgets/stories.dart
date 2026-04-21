@@ -26,6 +26,7 @@ class Stories extends StatelessWidget {
           final StoryItem item = entry.value;
           return StoryBubble(
             label: item.label,
+            imageUrl: item.avatarUrl,
             isMine: item.isMine,
             isViewed: item.isViewed,
             onTap: () => onStoryTap(index),
@@ -42,6 +43,7 @@ class StoryBubble extends StatelessWidget {
     super.key,
     required this.label,
     required this.onTap,
+    this.imageUrl,
     this.isMine = false,
     this.isViewed = false,
     this.onAddTap,
@@ -49,6 +51,7 @@ class StoryBubble extends StatelessWidget {
 
   final String label;
   final VoidCallback onTap;
+  final String? imageUrl;
   final bool isMine;
   final bool isViewed;
   final VoidCallback? onAddTap;
@@ -99,14 +102,22 @@ class StoryBubble extends StatelessWidget {
                               color: Color(0xFFE5E7EB),
                             ),
                             child: Center(
-                              child: Text(
-                                _initials(label),
-                                style: const TextStyle(
-                                  color: Color(0xFF121417),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              child: (imageUrl?.isNotEmpty == true)
+                                  ? ClipOval(
+                                      child: Image.network(
+                                        imageUrl!,
+                                        width: 46,
+                                        height: 46,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (
+                                              BuildContext context,
+                                              Object error,
+                                              StackTrace? stackTrace,
+                                            ) => _InitialsText(label: label),
+                                      ),
+                                    )
+                                  : _InitialsText(label: label),
                             ),
                           ),
                         ),
@@ -158,6 +169,24 @@ class StoryBubble extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _InitialsText extends StatelessWidget {
+  const _InitialsText({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _initials(label),
+      style: const TextStyle(
+        color: Color(0xFF121417),
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
       ),
     );
   }

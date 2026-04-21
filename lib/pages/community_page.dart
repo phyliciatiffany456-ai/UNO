@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/post_item.dart';
 import '../models/story_item.dart';
 import '../models/story_seen_store.dart';
@@ -36,11 +39,48 @@ class _CommunityPageState extends State<CommunityPage> {
 
   bool _friendMode = true;
   bool _loading = true;
+  StreamSubscription<List<Map<String, dynamic>>>? _followsSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _roomMembersSubscription;
+  Timer? _reloadDebounce;
 
   @override
   void initState() {
     super.initState();
+    _bindRealtimeUpdates();
     _loadCommunity();
+  }
+
+  @override
+  void dispose() {
+    _reloadDebounce?.cancel();
+    _followsSubscription?.cancel();
+    _roomMembersSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _bindRealtimeUpdates() {
+    final String? currentUserId = _socialService.currentUser?.id;
+    if (currentUserId == null || currentUserId.isEmpty) return;
+
+    _followsSubscription = Supabase.instance.client
+        .from('user_follows')
+        .stream(primaryKey: const <String>['id'])
+        .eq('follower_id', currentUserId)
+        .listen((_) => _scheduleCommunityReload());
+
+    _roomMembersSubscription = Supabase.instance.client
+        .from('chat_room_members')
+        .stream(primaryKey: const <String>['id'])
+        .eq('user_id', currentUserId)
+        .listen((_) => _scheduleCommunityReload());
+  }
+
+  void _scheduleCommunityReload() {
+    _reloadDebounce?.cancel();
+    _reloadDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _loadCommunity();
+    });
   }
 
   Future<void> _loadCommunity() async {
@@ -58,7 +98,8 @@ class _CommunityPageState extends State<CommunityPage> {
         followingIds: followingIds,
       );
       final List<StoryItem> people = await _buildCommunityPeople();
-      final List<ChatRoomItem> groupRooms = await _chatService.fetchMyGroupRooms();
+      final List<ChatRoomItem> groupRooms = await _chatService
+          .fetchMyGroupRooms();
 
       if (!mounted) return;
       setState(() {
@@ -92,7 +133,8 @@ class _CommunityPageState extends State<CommunityPage> {
       if (post.type != PostType.short) continue;
       final DateTime? createdAt = post.createdAt;
       if (createdAt == null || createdAt.isBefore(threshold)) continue;
-      final bool isMine = currentUserId != null && post.authorId == currentUserId;
+      final bool isMine =
+          currentUserId != null && post.authorId == currentUserId;
       final bool isFollowed = followingIds.contains(post.authorId);
       if (!isMine && !isFollowed) continue;
       latestStoryByAuthor.putIfAbsent(post.authorId, () => post);
@@ -116,6 +158,7 @@ class _CommunityPageState extends State<CommunityPage> {
           (PostItem post) => StoryItem(
             label: post.name,
             authorId: post.authorId,
+            avatarUrl: post.avatarUrl,
             isMine: currentUserId != null && post.authorId == currentUserId,
             isViewed: StorySeenStore.isSeen(
               authorId: post.authorId,
@@ -134,10 +177,7 @@ class _CommunityPageState extends State<CommunityPage> {
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           backgroundColor: const Color(0xFF13151A),
-          title: const Text(
-            'Buat Grup',
-            style: TextStyle(color: Colors.white),
-          ),
+          title: const Text('Buat Grup', style: TextStyle(color: Colors.white)),
           content: SizedBox(
             width: 360,
             child: TextField(
@@ -209,7 +249,9 @@ class _CommunityPageState extends State<CommunityPage> {
     nameController.dispose();
     if (created == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grup berhasil dibuat. Bagikan kode grup ke temanmu.')),
+        const SnackBar(
+          content: Text('Grup berhasil dibuat. Bagikan kode grup ke temanmu.'),
+        ),
       );
     }
   }
@@ -277,9 +319,9 @@ class _CommunityPageState extends State<CommunityPage> {
     if (joined == true) {
       await _loadCommunity();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Berhasil masuk ke grup.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Berhasil masuk ke grup.')));
     }
   }
 
@@ -293,6 +335,7 @@ class _CommunityPageState extends State<CommunityPage> {
           (user) => StoryItem(
             label: user.name,
             authorId: user.userId,
+            avatarUrl: user.avatarUrl,
             isViewed: StorySeenStore.isSeen(
               authorId: user.userId,
               label: user.name,
@@ -314,10 +357,13 @@ class _CommunityPageState extends State<CommunityPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
   }
 
-  void _openCreateShort() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const CreateShortPage()));
+  Future<void> _openCreateShort() async {
+    final bool? created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(builder: (_) => const CreateShortPage()),
+    );
+    if (created == true && mounted) {
+      await _loadCommunity();
+    }
   }
 
   Future<void> _openStory(int index) async {
@@ -335,9 +381,7 @@ class _CommunityPageState extends State<CommunityPage> {
 
   Future<void> _openInlineStory(StoryItem person) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: person),
-      ),
+      MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: person)),
     );
     StorySeenStore.markSeen(authorId: person.authorId, label: person.label);
     if (!mounted) return;
@@ -367,14 +411,15 @@ class _CommunityPageState extends State<CommunityPage> {
             initialRoomId: roomId,
             roomTitle: person.label,
             isGroupRoom: false,
+            otherUserId: userId,
           ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal membuka chat: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal membuka chat: $error')));
     }
   }
 
@@ -429,8 +474,8 @@ class _CommunityPageState extends State<CommunityPage> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _friendMode
-                      ? _buildPeopleList()
-                      : _buildGroupList(),
+                  ? _buildPeopleList()
+                  : _buildGroupList(),
             ),
           ],
         ),
@@ -472,7 +517,8 @@ class _CommunityPageState extends State<CommunityPage> {
         final StoryItem person = _communityPeople[index];
         final String label = person.label;
         final bool hasStory =
-            person.authorId != null && activeStoryUserIds.contains(person.authorId);
+            person.authorId != null &&
+            activeStoryUserIds.contains(person.authorId);
         return Container(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           decoration: BoxDecoration(
@@ -484,6 +530,7 @@ class _CommunityPageState extends State<CommunityPage> {
             children: [
               _InlineStoryAvatar(
                 label: label,
+                imageUrl: person.avatarUrl,
                 viewed: StorySeenStore.isSeen(
                   authorId: person.authorId,
                   label: label,
@@ -628,7 +675,7 @@ class _CommunityPageState extends State<CommunityPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Kode: ${room.id}',
+                                  'Kode: ${room.roomCode ?? '-'}',
                                   style: const TextStyle(
                                     color: Colors.white38,
                                     fontSize: 10,
@@ -644,7 +691,7 @@ class _CommunityPageState extends State<CommunityPage> {
                         children: [
                           Expanded(
                             child: AppButton(
-                              label: 'Masuk Grup',
+                              label: 'Chat Grup',
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute<void>(
                                   builder: (_) => ChatBoxPage(
@@ -690,12 +737,14 @@ class _CommunityPageState extends State<CommunityPage> {
 class _InlineStoryAvatar extends StatelessWidget {
   const _InlineStoryAvatar({
     required this.label,
+    this.imageUrl,
     required this.viewed,
     required this.hasStory,
     this.onTap,
   });
 
   final String label;
+  final String? imageUrl;
   final bool viewed;
   final bool hasStory;
   final VoidCallback? onTap;
@@ -703,9 +752,7 @@ class _InlineStoryAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Gradient ringGradient = viewed
-        ? const LinearGradient(
-            colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
-          )
+        ? const LinearGradient(colors: [Color(0xFF6B7280), Color(0xFF6B7280)])
         : const LinearGradient(
             colors: [Color(0xFFFEDA75), Color(0xFFFA7E1E), Color(0xFFD62976)],
             begin: Alignment.topLeft,
@@ -739,19 +786,45 @@ class _InlineStoryAvatar extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: Color(0xFFE5E7EB),
                 ),
-                child: Center(
-                  child: Text(
-                    _initials(label),
-                    style: const TextStyle(
-                      color: Color(0xFF121417),
-                      fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
+                child: (imageUrl?.isNotEmpty == true)
+                    ? ClipOval(
+                        child: Image.network(
+                          imageUrl!,
+                          width: 20,
+                          height: 20,
+                          fit: BoxFit.cover,
+                          errorBuilder:
+                              (
+                                BuildContext context,
+                                Object error,
+                                StackTrace? stackTrace,
+                              ) => _InlineInitials(label: label),
+                        ),
+                      )
+                    : _InlineInitials(label: label),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineInitials extends StatelessWidget {
+  const _InlineInitials({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        _initials(label),
+        style: const TextStyle(
+          color: Color(0xFF121417),
+          fontSize: 8,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

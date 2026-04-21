@@ -2,18 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/post_item.dart';
-import '../models/story_item.dart';
 import '../navigation/app_routes.dart';
 import '../services/post_service.dart';
 import '../widgets/bottom_nav.dart';
-import '../widgets/expandable_text.dart';
-import '../widgets/profile_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
-import 'profile_connections_page.dart';
 import 'notifications_page.dart';
 import 'search_page.dart';
-import 'story_viewer_page.dart';
 
 class ProfileDashboardPage extends StatefulWidget {
   const ProfileDashboardPage({super.key});
@@ -25,11 +20,7 @@ class ProfileDashboardPage extends StatefulWidget {
 class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
   final PostService _postService = PostService();
 
-  bool _viewedProfileStory = false;
   bool _loading = true;
-
-  String _displayName = 'User';
-  String _bio = 'Belum ada bio.';
 
   int _postCount = 0;
   int _insightCount = 0;
@@ -63,16 +54,6 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
     });
 
     try {
-      final Map<String, dynamic> metadata =
-          user.userMetadata ?? <String, dynamic>{};
-      final String name = (metadata['full_name'] as String?)?.trim().isNotEmpty ==
-              true
-          ? metadata['full_name'].toString()
-          : (user.email ?? 'User');
-      final String bio = (metadata['bio'] as String?)?.trim().isNotEmpty == true
-          ? metadata['bio'].toString()
-          : 'Belum ada bio.';
-
       final List<PostItem> posts = await _postService.fetchFeed();
       final List<PostItem> myPosts =
           posts.where((PostItem p) => p.authorId == user.id).toList();
@@ -120,8 +101,6 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
         (int total, PostItem post) => total + post.shareCount,
       );
       setState(() {
-        _displayName = name;
-        _bio = bio;
         _postCount = myPosts.length;
         _insightCount =
             myPosts.where((PostItem p) => p.type == PostType.insight).length;
@@ -162,14 +141,6 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
   }
 
-  void _openConnections(ConnectionTab tab) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProfileConnectionsPage(initialTab: tab),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -186,86 +157,14 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
                       onSearchTap: _openSearch,
                     ),
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF13151A),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF24262E)),
+                    const Text(
+                      'Dashboard',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        fontStyle: FontStyle.italic,
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _ProfileMiniHeaderAvatar(
-                            label: _displayName,
-                            viewed: _viewedProfileStory,
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => StoryViewerPage(
-                                    story: StoryItem(label: _displayName),
-                                  ),
-                                ),
-                              );
-                              if (!mounted) return;
-                              setState(() {
-                                _viewedProfileStory = true;
-                              });
-                            },
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _displayName,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    _SmallStat(
-                                      label: 'Postingan',
-                                      value: '$_postCount',
-                                    ),
-                                    _SmallStat(
-                                      label: 'Pengikut',
-                                      value: '-',
-                                      onTap: () => _openConnections(
-                                        ConnectionTab.followers,
-                                      ),
-                                    ),
-                                    _SmallStat(
-                                      label: 'Mengikuti',
-                                      value: '-',
-                                      onTap: () => _openConnections(
-                                        ConnectionTab.following,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ExpandableText(
-                      text: _bio,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
                     ),
                     const SizedBox(height: 10),
                     _MetricCard(
@@ -348,61 +247,6 @@ class _ProfileDashboardPageState extends State<ProfileDashboardPage> {
         ).push(MaterialPageRoute<void>(builder: (_) => const CreatePostPage())),
         onCommunityTap: () => AppRoutes.goCommunity(context),
         onProfileTap: () => AppRoutes.goProfile(context),
-      ),
-    );
-  }
-}
-
-class _ProfileMiniHeaderAvatar extends StatelessWidget {
-  const _ProfileMiniHeaderAvatar({
-    required this.label,
-    required this.viewed,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool viewed;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) =>
-      ProfileRingAvatar(label: label, size: 74, viewed: viewed, onTap: onTap);
-}
-
-class _SmallStat extends StatelessWidget {
-  const _SmallStat({required this.label, required this.value, this.onTap});
-
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(6),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

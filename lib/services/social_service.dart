@@ -37,11 +37,13 @@ class UserMiniProfile {
     required this.userId,
     required this.name,
     required this.role,
+    this.avatarUrl,
   });
 
   final String userId;
   final String name;
   final String role;
+  final String? avatarUrl;
 }
 
 class FollowingSinceRecord {
@@ -56,7 +58,7 @@ class FollowingSinceRecord {
 
 class SocialService {
   SocialService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -172,12 +174,18 @@ class SocialService {
 
   Future<bool> sharePost(String postId) async {
     final User user = _requireUser();
-
-    await _client.from('post_shares').insert(<String, dynamic>{
-      'post_id': postId,
-      'user_id': user.id,
-    });
-    return true;
+    try {
+      await _client.from('post_shares').insert(<String, dynamic>{
+        'post_id': postId,
+        'user_id': user.id,
+      });
+      return true;
+    } on PostgrestException catch (error) {
+      if (error.code == '23505') {
+        return false;
+      }
+      rethrow;
+    }
   }
 
   Future<void> addComment({
@@ -296,8 +304,9 @@ class SocialService {
         .from('user_follows')
         .select('follower_id')
         .eq('following_id', userId);
-    final List<String> ids =
-        rows.map((Map<String, dynamic> row) => row['follower_id'].toString()).toList();
+    final List<String> ids = rows
+        .map((Map<String, dynamic> row) => row['follower_id'].toString())
+        .toList();
     return _fetchProfiles(ids);
   }
 
@@ -316,11 +325,13 @@ class SocialService {
     if (userIds.isEmpty) return <UserMiniProfile>[];
     final List<Map<String, dynamic>> rows = await _client
         .from('profiles')
-        .select('user_id,full_name,role')
+        .select('user_id,full_name,role,avatar_url')
         .inFilter('user_id', userIds);
-    final Map<String, Map<String, dynamic>> byId = <String, Map<String, dynamic>>{
-      for (final Map<String, dynamic> row in rows) row['user_id'].toString(): row,
-    };
+    final Map<String, Map<String, dynamic>> byId =
+        <String, Map<String, dynamic>>{
+          for (final Map<String, dynamic> row in rows)
+            row['user_id'].toString(): row,
+        };
     return userIds.map((String id) {
       final Map<String, dynamic>? row = byId[id];
       return UserMiniProfile(
@@ -331,6 +342,9 @@ class SocialService {
         role: (row?['role'] as String?)?.trim().isNotEmpty == true
             ? row!['role'].toString()
             : 'Role',
+        avatarUrl: (row?['avatar_url'] as String?)?.trim().isNotEmpty == true
+            ? row!['avatar_url'].toString()
+            : null,
       );
     }).toList();
   }

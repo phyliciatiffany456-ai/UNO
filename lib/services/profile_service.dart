@@ -14,6 +14,9 @@ class ProfileRecord {
     required this.workExperience,
     required this.role,
     this.avatarUrl,
+    this.cvFileName,
+    this.cvStoragePath,
+    this.cvPublicUrl,
   });
 
   final String userId;
@@ -25,6 +28,9 @@ class ProfileRecord {
   final String workExperience;
   final String role;
   final String? avatarUrl;
+  final String? cvFileName;
+  final String? cvStoragePath;
+  final String? cvPublicUrl;
 }
 
 class ProfileService {
@@ -81,6 +87,9 @@ class ProfileService {
     required String workExperience,
     required String role,
     String? avatarUrl,
+    String? cvFileName,
+    String? cvStoragePath,
+    String? cvPublicUrl,
   }) async {
     final User user = _requireUser();
     final Map<String, dynamic> payload = <String, dynamic>{
@@ -96,6 +105,15 @@ class ProfileService {
     };
     if (avatarUrl != null) {
       payload['avatar_url'] = avatarUrl.trim();
+    }
+    if (cvFileName != null) {
+      payload['cv_file_name'] = cvFileName.trim();
+    }
+    if (cvStoragePath != null) {
+      payload['cv_storage_path'] = cvStoragePath.trim();
+    }
+    if (cvPublicUrl != null) {
+      payload['cv_public_url'] = cvPublicUrl.trim();
     }
     await _client.from('profiles').upsert(payload, onConflict: 'user_id');
 
@@ -158,6 +176,16 @@ class ProfileService {
           : 'Role',
       avatarUrl: (row['avatar_url'] as String?)?.trim().isNotEmpty == true
           ? row['avatar_url'].toString()
+          : null,
+      cvFileName: (row['cv_file_name'] as String?)?.trim().isNotEmpty == true
+          ? row['cv_file_name'].toString()
+          : null,
+      cvStoragePath:
+          (row['cv_storage_path'] as String?)?.trim().isNotEmpty == true
+              ? row['cv_storage_path'].toString()
+              : null,
+      cvPublicUrl: (row['cv_public_url'] as String?)?.trim().isNotEmpty == true
+          ? row['cv_public_url'].toString()
           : null,
     );
   }

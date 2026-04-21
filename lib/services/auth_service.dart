@@ -99,6 +99,15 @@ class AuthService {
       return 'Koneksi ke server Supabase gagal. Cek internet, status project Supabase, dan pastikan URL/key yang dipakai masih aktif.';
     }
 
+    final bool isNotFoundFailure =
+        lower.contains('status code 404') ||
+        lower.contains('empty response with status code 404') ||
+        lower.contains('404 not found');
+
+    if (isNotFoundFailure) {
+      return 'Endpoint Supabase tidak ditemukan. Biasanya ini berarti SUPABASE_URL salah, project Supabase berbeda dari key yang dipakai, atau project sedang tidak aktif.';
+    }
+
     if (lower.contains('invalid login credentials')) {
       return 'Email atau password salah.';
     }

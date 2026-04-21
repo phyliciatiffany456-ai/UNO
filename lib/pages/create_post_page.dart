@@ -32,8 +32,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
   final PostService _postService = PostService();
   final ImagePicker _imagePicker = ImagePicker();
 
-  bool hideLikeAndViewCount = true;
-  bool turnOffCommenting = true;
   String selectedCategory = 'Insight';
   String selectedAccessibility = 'Public';
   bool _isPosting = false;
@@ -97,9 +95,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
       await _postService.createPost(
         content: content,
         type: _mapCategory(selectedCategory),
-        accessibility: selectedAccessibility,
-        hideLikeAndViewCount: hideLikeAndViewCount,
-        turnOffCommenting: turnOffCommenting,
+        accessibility: _mapAccessibility(selectedAccessibility),
         images: _selectedImages,
         jobTitle: jobTitle,
         jobLocation: _jobLocationController.text.trim(),
@@ -147,6 +143,16 @@ class _CreatePostPageState extends State<CreatePostPage> {
       case 'Portofolio':
       default:
         return PostType.insight;
+    }
+  }
+
+  String _mapAccessibility(String value) {
+    switch (value) {
+      case 'Friends only':
+        return 'private';
+      case 'Public':
+      default:
+        return 'public';
     }
   }
 
@@ -300,7 +306,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     child: _CreateDropdownField(
                       label: 'Accessibility',
                       value: selectedAccessibility,
-                      options: const <String>['Public', 'Private'],
+                      options: const <String>['Public', 'Friends only'],
                       onChanged: (String value) {
                         setState(() {
                           selectedAccessibility = value;
@@ -308,7 +314,20 @@ class _CreatePostPageState extends State<CreatePostPage> {
                       },
                     ),
                   ),
-                ],
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Text(
+                selectedAccessibility == 'Friends only'
+                    ? 'Friends only berarti hanya akun yang saling follow dengan kamu yang bisa melihat postingan ini.'
+                    : 'Public berarti semua pengguna yang punya akses ke feed bisa melihat postingan ini.',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  height: 1.4,
+                ),
               ),
             ),
             if (selectedCategory == 'Loker')
@@ -351,32 +370,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: _DescriptionField(controller: _descriptionController),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: _ToggleRow(
-                label: 'Hide like and view counts on this post',
-                value: hideLikeAndViewCount,
-                onChanged: (bool value) {
-                  setState(() {
-                    hideLikeAndViewCount = value;
-                  });
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: _ToggleRow(
-                label: 'Turn off commenting',
-                value: turnOffCommenting,
-                onChanged: (bool value) {
-                  setState(() {
-                    turnOffCommenting = value;
-                  });
-                },
-              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
@@ -531,47 +524,6 @@ class _DescriptionField extends StatelessWidget {
           border: InputBorder.none,
           isCollapsed: true,
         ),
-      ),
-    );
-  }
-}
-
-class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFF3D00)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 11),
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: Colors.white,
-            activeTrackColor: const Color(0xFFFF1E13),
-            inactiveTrackColor: Colors.white24,
-          ),
-        ],
       ),
     );
   }

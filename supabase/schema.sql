@@ -11,6 +11,9 @@ create table if not exists public.profiles (
   full_name text not null default 'User',
   role text not null default 'Role',
   avatar_url text,
+  cv_file_name text,
+  cv_storage_path text,
+  cv_public_url text,
   bio text not null default 'Belum ada bio.',
   pronoun text not null default 'Ms.',
   gender text not null default 'Perempuan',
@@ -20,6 +23,9 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists cv_file_name text;
+alter table public.profiles add column if not exists cv_storage_path text;
+alter table public.profiles add column if not exists cv_public_url text;
 
 alter table public.profiles enable row level security;
 
@@ -307,6 +313,40 @@ with check (auth.uid() = user_id);
 drop policy if exists "Users can unshare own shares" on public.post_shares;
 create policy "Users can unshare own shares"
 on public.post_shares
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+-- =========================
+-- Saved posts
+-- =========================
+create table if not exists public.saved_posts (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (post_id, user_id)
+);
+
+alter table public.saved_posts enable row level security;
+
+drop policy if exists "Users can read own saved posts" on public.saved_posts;
+create policy "Users can read own saved posts"
+on public.saved_posts
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can save posts as themselves" on public.saved_posts;
+create policy "Users can save posts as themselves"
+on public.saved_posts
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can unsave own saved posts" on public.saved_posts;
+create policy "Users can unsave own saved posts"
+on public.saved_posts
 for delete
 to authenticated
 using (auth.uid() = user_id);
@@ -619,8 +659,10 @@ alter table public.chat_messages
   add column if not exists created_at timestamptz not null default now();
 
 update public.chat_rooms
-set room_code = upper(substr(replace(id::text, '-', ''), 1, 8))
-where room_code is null or btrim(room_code) = '';
+set room_code = upper(substr(replace(id::text, '-', ''), 1, 6))
+where room_code is null
+   or btrim(room_code) = ''
+   or length(btrim(room_code)) > 6;
 
 do $$
 begin
@@ -708,6 +750,7 @@ declare
   created_room_id uuid;
   target_member_id uuid;
   clean_room_name text;
+  generated_room_code text;
 begin
   current_uid := auth.uid();
   if current_uid is null then
@@ -715,9 +758,10 @@ begin
   end if;
 
   clean_room_name := coalesce(nullif(trim(target_room_name), ''), 'Grup Baru');
+  generated_room_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
 
-  insert into public.chat_rooms(name, is_group, created_by)
-  values (clean_room_name, true, current_uid)
+  insert into public.chat_rooms(name, is_group, created_by, room_code)
+  values (clean_room_name, true, current_uid, generated_room_code)
   returning id into created_room_id;
 
   insert into public.chat_room_members(room_id, user_id)
@@ -759,7 +803,7 @@ begin
   end if;
 
   clean_room_name := coalesce(nullif(trim(target_room_name), ''), 'Grup Baru');
-  generated_room_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+  generated_room_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
 
   insert into public.chat_rooms(name, is_group, created_by, room_code)
   values (clean_room_name, true, current_uid, generated_room_code)

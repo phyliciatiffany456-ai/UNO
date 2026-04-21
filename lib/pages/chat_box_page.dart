@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../navigation/app_routes.dart';
 import '../services/chat_service.dart';
 import '../services/google_meet_service.dart';
+import '../services/profile_service.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/story_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'chat_profile_info_page.dart';
 import 'create_post_page.dart';
@@ -17,11 +19,13 @@ class ChatBoxPage extends StatefulWidget {
     this.initialRoomId,
     this.roomTitle,
     this.isGroupRoom = true,
+    this.otherUserId,
   });
 
   final String? initialRoomId;
   final String? roomTitle;
   final bool isGroupRoom;
+  final String? otherUserId;
 
   @override
   State<ChatBoxPage> createState() => _ChatBoxPageState();
@@ -30,10 +34,12 @@ class ChatBoxPage extends StatefulWidget {
 class _ChatBoxPageState extends State<ChatBoxPage> {
   final ChatService _chatService = ChatService();
   final GoogleMeetService _googleMeetService = GoogleMeetService();
+  final ProfileService _profileService = ProfileService();
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String? _roomId;
   String? _roomError;
+  String? _avatarUrl;
   Stream<List<ChatMessageItem>>? _messageStream;
   List<ChatMessageItem> _cachedMessages = <ChatMessageItem>[];
   List<ChatMessageItem> _pendingMessages = <ChatMessageItem>[];
@@ -43,11 +49,25 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
   void initState() {
     super.initState();
     _controller.addListener(_refreshInputState);
+    _loadHeaderProfile();
     if (widget.initialRoomId != null) {
       _bindRoom(widget.initialRoomId!);
     } else {
       _setupRoom();
     }
+  }
+
+  Future<void> _loadHeaderProfile() async {
+    if (widget.isGroupRoom || widget.otherUserId == null) return;
+    try {
+      final ProfileRecord? profile = await _profileService.fetchProfileByUserId(
+        widget.otherUserId!,
+      );
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = profile?.avatarUrl;
+      });
+    } catch (_) {}
   }
 
   void _bindRoom(String roomId) {
@@ -527,15 +547,23 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                     children: [
                       Row(
                         children: [
-                          const CircleAvatar(
-                            radius: 17,
-                            backgroundColor: Color(0xFFE5E7EB),
-                            child: Icon(
-                              Icons.groups_2_outlined,
-                              color: Color(0xFF121417),
-                              size: 18,
-                            ),
-                          ),
+                          widget.isGroupRoom
+                              ? const CircleAvatar(
+                                  radius: 17,
+                                  backgroundColor: Color(0xFFE5E7EB),
+                                  child: Icon(
+                                    Icons.groups_2_outlined,
+                                    color: Color(0xFF121417),
+                                    size: 18,
+                                  ),
+                                )
+                              : StoryRingProfileAvatar(
+                                  label: title,
+                                  viewed: true,
+                                  hasStory: false,
+                                  size: 34,
+                                  imageUrl: _avatarUrl,
+                                ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: InkWell(

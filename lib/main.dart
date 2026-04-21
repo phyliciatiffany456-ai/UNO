@@ -11,8 +11,13 @@ const _supabasePublishableKey = String.fromEnvironment(
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (_supabaseUrl.isEmpty || _supabasePublishableKey.isEmpty) {
-    runApp(const _MissingConfigApp());
+  final String? configProblem = _validateSupabaseConfig(
+    url: _supabaseUrl,
+    publishableKey: _supabasePublishableKey,
+  );
+
+  if (configProblem != null) {
+    runApp(_MissingConfigApp(message: configProblem));
     return;
   }
 
@@ -24,8 +29,39 @@ Future<void> main() async {
   runApp(const UnoApp());
 }
 
+String? _validateSupabaseConfig({
+  required String url,
+  required String publishableKey,
+}) {
+  if (url.isEmpty || publishableKey.isEmpty) {
+    return 'Supabase config belum diisi.\n\n'
+        'Isi file .vscode/supabase.local.json lalu jalankan ulang app.';
+  }
+
+  final Uri? parsedUrl = Uri.tryParse(url);
+  final bool validHttpUrl =
+      parsedUrl != null &&
+      (parsedUrl.scheme == 'http' || parsedUrl.scheme == 'https') &&
+      parsedUrl.host.isNotEmpty;
+
+  if (!validHttpUrl) {
+    return 'SUPABASE_URL tidak valid.\n\n'
+        'Gunakan format seperti:\n'
+        'https://PROJECT-REF.supabase.co';
+  }
+
+  if (publishableKey.length < 20) {
+    return 'SUPABASE_PUBLISHABLE_KEY terlihat tidak valid.\n\n'
+        'Pastikan yang dipakai adalah anon/publishable key dari project Supabase.';
+  }
+
+  return null;
+}
+
 class _MissingConfigApp extends StatelessWidget {
-  const _MissingConfigApp();
+  const _MissingConfigApp({required this.message});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
@@ -38,11 +74,10 @@ class _MissingConfigApp extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
-              child: const Text(
-                'Supabase config belum diisi.\n\n'
-                'Jalankan dengan:\n'
-                '--dart-define=SUPABASE_URL=...\n'
-                '--dart-define=SUPABASE_PUBLISHABLE_KEY=...\n\n',
+              child: Text(
+                '$message\n\n'
+                'Contoh file:\n'
+                '.vscode/supabase.local.json',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 16,

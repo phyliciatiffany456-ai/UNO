@@ -390,35 +390,46 @@ class _FeedPostState extends State<FeedPost> {
   }
 
   Future<void> _toggleShare() async {
-    setState(() {
-      _shared = true;
-      _shareCount = (_shareCount + 1).clamp(0, 1000000).toInt();
-    });
-
     try {
-      await _socialService.sharePost(widget.post.id);
+      final bool inserted = await _socialService.sharePost(widget.post.id);
+      if (!mounted) return;
+      if (inserted) {
+        setState(() {
+          _shared = true;
+          _shareCount = (_shareCount + 1).clamp(0, 1000000).toInt();
+        });
+      }
       if (!mounted) return;
       await _openShareSheet();
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      await _openShareSheet();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal menyimpan share: $error')));
     }
   }
 
   Future<void> _savePost() async {
-    SavedPostStore.save(widget.post);
-    if (!mounted) return;
-    setState(() {
-      _saved = true;
-    });
-    if (!widget.openSavedPageOnSave) return;
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const SavedPostsPage()));
-    if (!mounted) return;
-    setState(() {
-      _saved = SavedPostStore.contains(widget.post.id);
-    });
+    try {
+      await SavedPostStore.save(widget.post);
+      if (!mounted) return;
+      setState(() {
+        _saved = true;
+      });
+      if (!widget.openSavedPageOnSave) return;
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const SavedPostsPage()));
+      if (!mounted) return;
+      setState(() {
+        _saved = SavedPostStore.contains(widget.post.id);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal menyimpan post: $error')));
+    }
   }
 
   Future<void> _openShareSheet() async {
@@ -563,7 +574,7 @@ class _FeedPostState extends State<FeedPost> {
                               itemCount: comments.length,
                               separatorBuilder:
                                   (BuildContext context, int index) =>
-                                  const SizedBox(height: 8),
+                                      const SizedBox(height: 8),
                               itemBuilder: (BuildContext context, int index) {
                                 final PostCommentItem comment = comments[index];
                                 return Container(
@@ -691,6 +702,7 @@ class _FeedPostState extends State<FeedPost> {
       hasStory: widget.hasStory,
       viewed: _isStoryViewed,
       label: post.name,
+      imageUrl: post.avatarUrl,
       onTap: widget.hasStory
           ? () async {
               await Navigator.of(context).push(
@@ -699,6 +711,7 @@ class _FeedPostState extends State<FeedPost> {
                     story: StoryItem(
                       label: post.name,
                       authorId: post.authorId,
+                      avatarUrl: post.avatarUrl,
                       isViewed: _isStoryViewed,
                     ),
                   ),

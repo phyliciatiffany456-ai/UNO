@@ -192,7 +192,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                   children: [
                                     _ProfileStat(
                                       label: 'Postingan',
-                                      value: '${_myPosts.length}',
+                                      value:
+                                          '${_myPosts.where((PostItem p) => p.type != PostType.short).length}',
                                     ),
                                     _ProfileStat(
                                       label: 'Pengikut',
@@ -237,7 +238,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             onTap: () => Navigator.of(context)
                                 .push(
                                   MaterialPageRoute<void>(
-                                    builder: (_) => const ProfileDashboardPage(),
+                                    builder: (_) =>
+                                        const ProfileDashboardPage(),
                                   ),
                                 )
                                 .then((_) => _loadProfile()),
@@ -346,10 +348,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                               BuildContext context,
                                               Object error,
                                               StackTrace? stackTrace,
-                                            ) =>
-                                            const ColoredBox(
-                                          color: Color(0xFFC8C8C8),
-                                        ),
+                                            ) => const ColoredBox(
+                                              color: Color(0xFFC8C8C8),
+                                            ),
                                       )
                                     : Container(
                                         color: const Color(0xFF20242B),
@@ -393,8 +394,13 @@ class _ProfilePageState extends State<ProfilePage> {
     final String? myUserId = Supabase.instance.client.auth.currentUser?.id;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            StoryViewerPage(story: StoryItem(label: label, authorId: myUserId)),
+        builder: (_) => StoryViewerPage(
+          story: StoryItem(
+            label: label,
+            authorId: myUserId,
+            avatarUrl: _avatarUrl,
+          ),
+        ),
       ),
     );
     StorySeenStore.markSeen(authorId: myUserId, label: label);
@@ -497,26 +503,36 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
 
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PostZoomPage(post: post),
-      ),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => PostZoomPage(post: post)));
   }
 
   List<PostItem> _filteredPosts() {
     switch (_activeTab) {
       case _ProfileTab.all:
-        return _myPosts.where((PostItem post) => post.type != PostType.job).toList();
+        return _myPosts
+            .where(
+              (PostItem post) =>
+                  post.type != PostType.job && post.type != PostType.short,
+            )
+            .toList();
       case _ProfileTab.post:
         return _myPosts
             .where(
               (PostItem post) =>
-                  post.type != PostType.job && !_isVideoPost(post),
+                  post.type != PostType.job &&
+                  post.type != PostType.short &&
+                  !_isVideoPost(post),
             )
             .toList();
       case _ProfileTab.video:
-        return _myPosts.where(_isVideoPost).toList();
+        return _myPosts
+            .where(
+              (PostItem post) =>
+                  post.type != PostType.short && _isVideoPost(post),
+            )
+            .toList();
       case _ProfileTab.job:
         return _myPosts
             .where((PostItem post) => post.type == PostType.job)
@@ -527,7 +543,8 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isVideoPost(PostItem post) {
     if (post.type == PostType.short) return true;
     final String content = post.content.toLowerCase();
-    final bool isVideoLink = content.contains('youtube.com') ||
+    final bool isVideoLink =
+        content.contains('youtube.com') ||
         content.contains('youtu.be') ||
         content.contains('vimeo.com') ||
         content.contains('.mp4');
@@ -663,9 +680,9 @@ class _JobPostCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: (_) => PostZoomPage(post: post))),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => PostZoomPage(post: post)),
+        ),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/notification_store.dart';
+import '../models/saved_post_store.dart';
 import '../models/story_seen_store.dart';
 import '../navigation/app_routes.dart';
 import '../models/post_item.dart';
@@ -99,8 +100,8 @@ class _HomePageState extends State<HomePage> {
           ? posts.first.createdAt
           : null;
       final Set<String> followingIds = await _socialService.getFollowingIds();
-      final Map<String, DateTime> followingSinceByAuthor =
-          await _socialService.getFollowingSinceMap(userId: user.id);
+      final Map<String, DateTime> followingSinceByAuthor = await _socialService
+          .getFollowingSinceMap(userId: user.id);
       final List<PostItem> notificationPosts = posts.where((PostItem post) {
         final DateTime? followedAt = followingSinceByAuthor[post.authorId];
         final DateTime? createdAt = post.createdAt;
@@ -126,13 +127,16 @@ class _HomePageState extends State<HomePage> {
         currentUserId: user.id,
         followingIds: followingIds,
       );
+      await SavedPostStore.load(feedPosts: posts);
       final Set<String> usersWithStory = builtStories
           .map((StoryItem story) => story.authorId ?? '')
           .where((String authorId) => authorId.isNotEmpty)
           .toSet();
 
       setState(() {
-        _posts = posts;
+        _posts = posts
+            .where((PostItem post) => post.type != PostType.short)
+            .toList();
         stories = builtStories;
         _usersWithStory
           ..clear()
@@ -185,6 +189,7 @@ class _HomePageState extends State<HomePage> {
           (PostItem post) => StoryItem(
             label: post.name,
             authorId: post.authorId,
+            avatarUrl: post.avatarUrl,
             isMine: post.authorId == currentUserId,
             isViewed: StorySeenStore.isSeen(
               authorId: post.authorId,

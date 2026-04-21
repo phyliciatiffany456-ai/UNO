@@ -25,14 +25,21 @@ samples, guidance on mobile development, and a full API reference.
 flutter pub get
 ```
 
-3. Run app with Supabase keys:
-```bash
-flutter run -d chrome \
-  --dart-define=SUPABASE_URL=YOUR_SUPABASE_URL \
-  --dart-define=SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
+3. Create local run config for VS Code:
+```json
+// .vscode/supabase.local.json
+{
+  "SUPABASE_URL": "YOUR_SUPABASE_URL",
+  "SUPABASE_PUBLISHABLE_KEY": "YOUR_SUPABASE_PUBLISHABLE_KEY"
+}
 ```
 
-4. What is connected:
+4. Run app with Supabase keys:
+```bash
+flutter run -d chrome --dart-define-from-file=.vscode/supabase.local.json
+```
+
+5. What is connected:
    - Register/login with Supabase Auth (email + password)
    - Feed reads from `public.posts`
    - Create post writes to `public.posts`
