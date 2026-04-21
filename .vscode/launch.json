@@ -7,6 +7,10 @@
       "type": "dart",
       "program": "lib/main.dart",
       "deviceId": "chrome",
+      "env": {
+        "TEMP": "D:\\FlutterTemp",
+        "TMP": "D:\\FlutterTemp"
+      },
       "args": [
         "--dart-define-from-file=.vscode/supabase.local.json"
       ]
