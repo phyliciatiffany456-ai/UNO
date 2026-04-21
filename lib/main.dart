@@ -41,8 +41,8 @@ class _MissingConfigApp extends StatelessWidget {
               child: const Text(
                 'Supabase config belum diisi.\n\n'
                 'Jalankan dengan:\n'
-                '--dart-define=_supabaseUrl\n'
-                '--dart-define=_supabasePublishableKey\n\n',
+                '--dart-define=SUPABASE_URL=...\n'
+                '--dart-define=SUPABASE_PUBLISHABLE_KEY=...\n\n',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 16,

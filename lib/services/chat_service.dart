@@ -118,7 +118,9 @@ class ChatService {
       'ensure_direct_room',
       params: <String, dynamic>{
         'target_user_id': otherUserId,
-        'target_room_name': 'HR - $otherUserName',
+        'target_room_name': otherUserName.trim().isEmpty
+            ? 'Direct Chat'
+            : otherUserName.trim(),
       },
     );
     return result.toString();

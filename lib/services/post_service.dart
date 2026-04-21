@@ -30,17 +30,24 @@ class PostService {
         .from(postsTable)
         .select()
         .order('created_at', ascending: false);
+    final List<String> authorIds = rows
+        .map((Map<String, dynamic> row) => row['author_id'].toString())
+        .toSet()
+        .toList();
     final List<String> postIds =
         rows.map((Map<String, dynamic> row) => row['id'].toString()).toList();
     final Map<String, PostEngagement> engagements =
         await _socialService.getPostEngagementMap(postIds);
     final Set<String> followingIds = await _socialService.getFollowingIds();
+    final Map<String, Map<String, dynamic>> profilesByAuthorId =
+        await _fetchProfilesByUserId(authorIds);
 
     return rows
         .map((Map<String, dynamic> row) => _mapPost(
               row,
               engagements[row['id'].toString()],
               followingIds,
+              profilesByAuthorId[row['author_id'].toString()],
             ))
         .toList();
   }
@@ -61,6 +68,7 @@ class PostService {
               row,
               null,
               <String>{},
+              null,
             ))
         .toList();
   }
@@ -95,10 +103,12 @@ class PostService {
       imageUrls.add(_client.storage.from(postImagesBucket).getPublicUrl(path));
     }
 
+    final Map<String, dynamic>? profile = await _fetchProfileByUserId(user.id);
+
     final Map<String, dynamic> payload = <String, dynamic>{
       'author_id': user.id,
-      'author_name': _authorNameFromUser(user),
-      'author_role': _authorRoleFromUser(user),
+      'author_name': _authorNameFromUser(user, profile),
+      'author_role': _authorRoleFromUser(user, profile),
       'content': content,
       'category': PostItem.typeToDb(type),
       'accessibility': accessibility.toLowerCase(),
@@ -125,6 +135,7 @@ class PostService {
     Map<String, dynamic> row,
     PostEngagement? engagement,
     Set<String> followingIds,
+    Map<String, dynamic>? profile,
   ) {
     final PostType type = PostItem.parseType(
       (row['category'] as String?) ?? 'insight',
@@ -137,12 +148,8 @@ class PostService {
     return PostItem(
       id: row['id'].toString(),
       authorId: row['author_id'].toString(),
-      name: (row['author_name'] as String?)?.trim().isNotEmpty == true
-          ? row['author_name'].toString()
-          : 'Unknown',
-      role: (row['author_role'] as String?)?.trim().isNotEmpty == true
-          ? row['author_role'].toString()
-          : 'Member',
+      name: _displayName(row, profile),
+      role: _displayRole(row, profile),
       content: (row['content'] as String?)?.trim() ?? '',
       type: type,
       imageUrls: imageUrls,
@@ -161,6 +168,59 @@ class PostService {
       jobDeadline: DateTime.tryParse((row['job_deadline'] as String?) ?? ''),
       createdAt: DateTime.tryParse((row['created_at'] as String?) ?? ''),
     );
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _fetchProfilesByUserId(
+    List<String> userIds,
+  ) async {
+    if (userIds.isEmpty) return <String, Map<String, dynamic>>{};
+
+    final List<Map<String, dynamic>> rows = await _client
+        .from('profiles')
+        .select('user_id,full_name,role')
+        .inFilter('user_id', userIds);
+
+    return <String, Map<String, dynamic>>{
+      for (final Map<String, dynamic> row in rows) row['user_id'].toString(): row,
+    };
+  }
+
+  Future<Map<String, dynamic>?> _fetchProfileByUserId(String userId) async {
+    final List<Map<String, dynamic>> rows = await _client
+        .from('profiles')
+        .select('user_id,full_name,role')
+        .eq('user_id', userId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  String _displayName(Map<String, dynamic> row, Map<String, dynamic>? profile) {
+    final String? profileName = profile?['full_name']?.toString().trim();
+    if (profileName != null && profileName.isNotEmpty) {
+      return profileName;
+    }
+
+    final String? postName = (row['author_name'] as String?)?.trim();
+    if (postName != null && postName.isNotEmpty) {
+      return postName;
+    }
+
+    return 'User';
+  }
+
+  String _displayRole(Map<String, dynamic> row, Map<String, dynamic>? profile) {
+    final String? profileRole = profile?['role']?.toString().trim();
+    if (profileRole != null && profileRole.isNotEmpty) {
+      return profileRole;
+    }
+
+    final String? postRole = (row['author_role'] as String?)?.trim();
+    if (postRole != null && postRole.isNotEmpty) {
+      return postRole;
+    }
+
+    return 'Role';
   }
 
   User _requireUser() {
@@ -206,18 +266,28 @@ class PostService {
     }
   }
 
-  String _authorNameFromUser(User user) {
+  String _authorNameFromUser(User user, Map<String, dynamic>? profile) {
+    final String? profileName = profile?['full_name']?.toString().trim();
+    if (profileName != null && profileName.isNotEmpty) {
+      return profileName;
+    }
+
     final Map<String, dynamic> metadata = user.userMetadata ?? <String, dynamic>{};
     return (metadata['full_name'] as String?)?.trim().isNotEmpty == true
         ? metadata['full_name'].toString()
         : (user.email ?? 'User');
   }
 
-  String _authorRoleFromUser(User user) {
+  String _authorRoleFromUser(User user, Map<String, dynamic>? profile) {
+    final String? profileRole = profile?['role']?.toString().trim();
+    if (profileRole != null && profileRole.isNotEmpty) {
+      return profileRole;
+    }
+
     final Map<String, dynamic> metadata = user.userMetadata ?? <String, dynamic>{};
     return (metadata['role'] as String?)?.trim().isNotEmpty == true
         ? metadata['role'].toString()
-        : 'UNO Member';
+        : 'Role';
   }
 
   String? _nullIfEmpty(String? value) {

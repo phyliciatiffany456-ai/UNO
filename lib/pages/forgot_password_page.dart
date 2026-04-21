@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/auth_service.dart';
 import '../widgets/app_button.dart';
@@ -80,10 +79,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           MaterialPageRoute<void>(builder: (_) => const LoginPage()),
         );
       }
-    } on AuthException catch (error) {
-      _showMessage(error.message);
-    } catch (_) {
-      _showMessage('Gagal ganti password. Coba lagi.');
+    } catch (error) {
+      _showMessage(_authService.readableError(error));
     } finally {
       if (mounted) {
         setState(() {

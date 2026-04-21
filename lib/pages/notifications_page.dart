@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../models/notification_store.dart';
 import '../models/post_item.dart';
+import '../models/post_streak.dart';
 import '../models/story_item.dart';
+import '../models/story_seen_store.dart';
 import '../navigation/app_routes.dart';
 import '../services/post_service.dart';
 import '../services/social_service.dart';
@@ -25,10 +27,10 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   final PostService _postService = PostService();
   final SocialService _socialService = SocialService();
-  final Set<String> _viewedStories = <String>{};
 
   List<PostItem> _notificationPosts = <PostItem>[];
-  Map<String, int> _authorPostCounts = <String, int>{};
+  Map<String, int> _authorStreaks = <String, int>{};
+  Set<String> _activeStoryAuthors = <String>{};
   bool _loading = true;
 
   @override
@@ -46,18 +48,36 @@ class _NotificationsPageState extends State<NotificationsPage> {
     try {
       final List<PostItem> posts = await _postService.fetchFeed();
       final String? currentUserId = _socialService.currentUser?.id;
+      final Map<String, DateTime> followingSinceByAuthor =
+          await _socialService.getFollowingSinceMap(userId: currentUserId);
+      final DateTime storyThreshold = DateTime.now().subtract(
+        const Duration(days: 1),
+      );
       final List<PostItem> notificationPosts = posts
-          .where((PostItem post) => post.authorId != currentUserId)
+          .where((PostItem post) {
+            if (post.authorId == currentUserId) return false;
+            final DateTime? followedAt = followingSinceByAuthor[post.authorId];
+            final DateTime? createdAt = post.createdAt;
+            if (followedAt == null || createdAt == null) return false;
+            return !createdAt.isBefore(followedAt);
+          })
           .toList();
-      final Map<String, int> authorPostCounts = <String, int>{};
-      for (final PostItem post in notificationPosts) {
-        authorPostCounts[post.authorId] =
-            (authorPostCounts[post.authorId] ?? 0) + 1;
-      }
+      final Map<String, int> authorStreaks = PostStreak.buildByAuthor(posts);
+      final Set<String> activeStoryAuthors = posts
+          .where(
+            (PostItem post) =>
+                post.type == PostType.short &&
+                post.createdAt != null &&
+                post.createdAt!.isAfter(storyThreshold) &&
+                followingSinceByAuthor.containsKey(post.authorId),
+          )
+          .map((PostItem post) => post.authorId)
+          .toSet();
       if (!mounted) return;
       setState(() {
         _notificationPosts = notificationPosts.take(30).toList();
-        _authorPostCounts = authorPostCounts;
+        _authorStreaks = authorStreaks;
+        _activeStoryAuthors = activeStoryAuthors;
       });
     } catch (_) {
       if (!mounted) return;
@@ -74,15 +94,17 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _openStory(PostItem post) async {
+    if (!_activeStoryAuthors.contains(post.authorId)) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: StoryItem(label: post.name)),
+        builder: (_) => StoryViewerPage(
+          story: StoryItem(label: post.name, authorId: post.authorId),
+        ),
       ),
     );
+    StorySeenStore.markSeen(authorId: post.authorId, label: post.name);
     if (!mounted) return;
-    setState(() {
-      _viewedStories.add(post.authorId);
-    });
+    setState(() {});
   }
 
   void _openSearch(BuildContext context) {
@@ -108,8 +130,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
   }
 
-  int _streakFromPost(PostItem post) {
-    return _authorPostCounts[post.authorId] ?? 0;
+  int? _streakFromPost(PostItem post) {
+    return _authorStreaks[post.authorId];
   }
 
   @override
@@ -162,23 +184,33 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                 child: ListView.separated(
                                   physics: const AlwaysScrollableScrollPhysics(),
                                   itemCount: _notificationPosts.length,
-                                  separatorBuilder: (_, __) =>
+                                  separatorBuilder:
+                                      (BuildContext context, int index) =>
                                       const SizedBox(height: 8),
                                   itemBuilder: (BuildContext context, int index) {
                                     final PostItem post = _notificationPosts[index];
+                                    final bool hasStory = _activeStoryAuthors
+                                        .contains(post.authorId);
                                     return _NotificationTile(
+                                      hasStory: hasStory,
                                       username: post.name,
                                       text: _notificationText(post),
                                       streakDays: _streakFromPost(post),
-                                      viewedStory: _viewedStories.contains(
-                                        post.authorId,
-                                      ),
-                                      onAvatarTap: () => _openStory(post),
+                                      viewedStory:
+                                          hasStory &&
+                                          StorySeenStore.isSeen(
+                                            authorId: post.authorId,
+                                            label: post.name,
+                                          ),
+                                      onAvatarTap: hasStory
+                                          ? () => _openStory(post)
+                                          : null,
                                       onNameTap: () {
                                         Navigator.of(context).push(
                                           MaterialPageRoute<void>(
                                             builder: (_) => ChatProfileInfoPage(
                                               name: post.name,
+                                              userId: post.authorId,
                                               role: post.role,
                                               bio: post.content,
                                             ),
@@ -219,6 +251,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
 class _NotificationTile extends StatelessWidget {
   const _NotificationTile({
+    required this.hasStory,
     required this.username,
     required this.text,
     required this.streakDays,
@@ -228,11 +261,12 @@ class _NotificationTile extends StatelessWidget {
     required this.onTap,
   });
 
+  final bool hasStory;
   final String username;
   final String text;
-  final int streakDays;
+  final int? streakDays;
   final bool viewedStory;
-  final VoidCallback onAvatarTap;
+  final VoidCallback? onAvatarTap;
   final VoidCallback onNameTap;
   final VoidCallback onTap;
 
@@ -252,6 +286,7 @@ class _NotificationTile extends StatelessWidget {
           children: [
             StoryRingProfileAvatar(
               size: 34,
+              hasStory: hasStory,
               viewed: viewedStory,
               label: username,
               onTap: onAvatarTap,
@@ -291,15 +326,19 @@ class _NotificationTile extends StatelessWidget {
             const SizedBox(width: 6),
             Column(
               children: [
-                const Icon(
+                Icon(
                   Icons.local_fire_department,
-                  color: Color(0xFFFFA84D),
+                  color: streakDays != null
+                      ? const Color(0xFFFFA84D)
+                      : const Color(0xFF6B7280),
                   size: 18,
                 ),
                 Text(
-                  '$streakDays',
-                  style: const TextStyle(
-                    color: Color(0xFFFFB27D),
+                  streakDays?.toString() ?? '-',
+                  style: TextStyle(
+                    color: streakDays != null
+                        ? const Color(0xFFFFB27D)
+                        : const Color(0xFF9CA3AF),
                     fontWeight: FontWeight.w700,
                     fontSize: 11,
                   ),

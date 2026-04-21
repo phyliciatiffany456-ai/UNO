@@ -9,7 +9,7 @@ create extension if not exists "pgcrypto";
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
   full_name text not null default 'User',
-  role text not null default 'UNO Member',
+  role text not null default 'Role',
   avatar_url text,
   bio text not null default 'Belum ada bio.',
   pronoun text not null default 'Ms.',
@@ -138,7 +138,7 @@ create table if not exists public.posts (
   id uuid primary key default gen_random_uuid(),
   author_id uuid not null references auth.users (id) on delete cascade,
   author_name text not null,
-  author_role text not null default 'UNO Member',
+  author_role text not null default 'Role',
   content text not null,
   category text not null check (category in ('insight', 'short', 'job')),
   accessibility text not null default 'public' check (accessibility in ('public', 'private')),
@@ -271,9 +271,22 @@ create table if not exists public.post_shares (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references public.posts (id) on delete cascade,
   user_id uuid not null references auth.users (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  unique (post_id, user_id)
+  created_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'post_shares_post_id_user_id_key'
+      and conrelid = 'public.post_shares'::regclass
+  ) then
+    alter table public.post_shares
+      drop constraint post_shares_post_id_user_id_key;
+  end if;
+end
+$$;
 
 alter table public.post_shares enable row level security;
 

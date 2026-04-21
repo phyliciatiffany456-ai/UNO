@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../navigation/app_routes.dart';
 import 'forgot_password_page.dart';
@@ -47,10 +46,8 @@ class _LoginPageState extends State<LoginPage> {
       await _authService.signIn(email: email, password: password);
       if (!mounted) return;
       AppRoutes.goHome(context);
-    } on AuthException catch (error) {
-      _showMessage(error.message);
-    } catch (_) {
-      _showMessage('Login gagal. Coba lagi sebentar.');
+    } catch (error) {
+      _showMessage(_authService.readableError(error));
     } finally {
       if (mounted) {
         setState(() {

@@ -265,6 +265,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       imageQuality: 85,
     );
     if (file == null) return;
+    if (!mounted) return;
     if (!_isAllowedAvatarFile(file.name)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -283,6 +284,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         displayName: _nameController.text.trim(),
         avatarUrl: url,
       );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Foto profil berhasil diubah.')),
       );

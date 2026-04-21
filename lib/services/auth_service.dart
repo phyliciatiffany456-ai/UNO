@@ -75,4 +75,34 @@ class AuthService {
   String _normalizeEmail(String email) {
     return email.trim().toLowerCase();
   }
+
+  String readableError(Object error) {
+    if (error is AuthException) {
+      final String message = error.message.trim();
+      if (message.isNotEmpty &&
+          message != 'AuthRetryableFetchException' &&
+          message != 'AuthUnknownException') {
+        return message;
+      }
+    }
+
+    final String raw = error.toString();
+    final String lower = raw.toLowerCase();
+
+    final bool isFetchFailure =
+        lower.contains('failed to fetch') ||
+        lower.contains('clientexception') ||
+        lower.contains('unable to connect') ||
+        lower.contains('authretryablefetchexception');
+
+    if (isFetchFailure) {
+      return 'Koneksi ke server Supabase gagal. Cek internet, status project Supabase, dan pastikan URL/key yang dipakai masih aktif.';
+    }
+
+    if (lower.contains('invalid login credentials')) {
+      return 'Email atau password salah.';
+    }
+
+    return 'Terjadi kesalahan. Coba lagi sebentar.';
+  }
 }

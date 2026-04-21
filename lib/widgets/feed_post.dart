@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import '../models/post_item.dart';
 import '../models/saved_post_store.dart';
 import '../models/story_seen_store.dart';
-import '../pages/chat_profile_info_page.dart';
 import '../models/story_item.dart';
+import '../pages/chat_profile_info_page.dart';
 import '../pages/job_apply_page.dart';
 import '../pages/saved_posts_page.dart';
 import '../pages/story_viewer_page.dart';
@@ -13,6 +13,7 @@ import '../services/social_service.dart';
 import 'app_button.dart';
 import 'expandable_text.dart';
 import 'pop_icon_button.dart';
+import 'story_ring_avatar.dart';
 
 class FeedPost extends StatefulWidget {
   const FeedPost({
@@ -389,21 +390,18 @@ class _FeedPostState extends State<FeedPost> {
   }
 
   Future<void> _toggleShare() async {
-    final bool next = !_shared;
     setState(() {
-      _shared = next;
-      _shareCount = (_shareCount + (next ? 1 : -1)).clamp(0, 1000000).toInt();
+      _shared = true;
+      _shareCount = (_shareCount + 1).clamp(0, 1000000).toInt();
     });
+
     try {
-      await _socialService.toggleShare(widget.post.id);
+      await _socialService.sharePost(widget.post.id);
       if (!mounted) return;
       await _openShareSheet();
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _shared = !next;
-        _shareCount = (_shareCount + (next ? -1 : 1)).clamp(0, 1000000).toInt();
-      });
+      await _openShareSheet();
     }
   }
 
@@ -455,10 +453,13 @@ class _FeedPostState extends State<FeedPost> {
                   title: 'WhatsApp',
                   subtitle: 'Kirim postingan ke WhatsApp',
                   onTap: () async {
+                    final NavigatorState sheetNavigator = Navigator.of(context);
+                    final ScaffoldMessengerState pageMessenger =
+                        ScaffoldMessenger.of(this.context);
                     await Clipboard.setData(ClipboardData(text: shareText));
-                    if (!mounted) return;
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(this.context).showSnackBar(
+                    if (!context.mounted || !mounted) return;
+                    sheetNavigator.pop();
+                    pageMessenger.showSnackBar(
                       const SnackBar(
                         content: Text(
                           'Teks postingan disalin. Tempel di WhatsApp.',
@@ -473,10 +474,13 @@ class _FeedPostState extends State<FeedPost> {
                   title: 'Copy Link',
                   subtitle: 'Salin teks postingan',
                   onTap: () async {
+                    final NavigatorState sheetNavigator = Navigator.of(context);
+                    final ScaffoldMessengerState pageMessenger =
+                        ScaffoldMessenger.of(this.context);
                     await Clipboard.setData(ClipboardData(text: shareText));
-                    if (!mounted) return;
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(this.context).showSnackBar(
+                    if (!context.mounted || !mounted) return;
+                    sheetNavigator.pop();
+                    pageMessenger.showSnackBar(
                       const SnackBar(
                         content: Text('Teks postingan berhasil disalin.'),
                       ),
@@ -557,7 +561,8 @@ class _FeedPostState extends State<FeedPost> {
                             )
                           : ListView.separated(
                               itemCount: comments.length,
-                              separatorBuilder: (_, __) =>
+                              separatorBuilder:
+                                  (BuildContext context, int index) =>
                                   const SizedBox(height: 8),
                               itemBuilder: (BuildContext context, int index) {
                                 final PostCommentItem comment = comments[index];
@@ -681,11 +686,12 @@ class _FeedPostState extends State<FeedPost> {
 
   Widget get _storyAvatar {
     final PostItem post = widget.post;
-    final bool withStoryRing = widget.hasStory;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(24),
-      onTap: withStoryRing
+    return StoryRingProfileAvatar(
+      size: 32,
+      hasStory: widget.hasStory,
+      viewed: _isStoryViewed,
+      label: post.name,
+      onTap: widget.hasStory
           ? () async {
               await Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -708,72 +714,7 @@ class _FeedPostState extends State<FeedPost> {
               });
             }
           : null,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: withStoryRing
-              ? (_isStoryViewed
-                    ? const LinearGradient(
-                        colors: [Color(0xFF6B7280), Color(0xFF6B7280)],
-                      )
-                    : const LinearGradient(
-                        colors: [
-                          Color(0xFFFEDA75),
-                          Color(0xFFFA7E1E),
-                          Color(0xFFD62976),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ))
-              : null,
-          color: withStoryRing ? null : const Color(0xFF6B7280),
-        ),
-        child: Center(
-          child: Container(
-            width: withStoryRing ? 28 : 32,
-            height: withStoryRing ? 28 : 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: withStoryRing
-                  ? const Color(0xFF0F1013)
-                  : Colors.transparent,
-            ),
-            child: Center(
-              child: Container(
-                width: 22,
-                height: 22,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  _avatarInitials(post.name),
-                  style: const TextStyle(
-                    color: Color(0xFF121417),
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
-  }
-
-  String _avatarInitials(String raw) {
-    final List<String> words = raw
-        .split(' ')
-        .map((String word) => word.trim())
-        .where((String word) => word.isNotEmpty)
-        .toList();
-    if (words.isEmpty) return 'U';
-    if (words.length == 1) return words.first.substring(0, 1).toUpperCase();
-    return '${words.first[0]}${words[1][0]}'.toUpperCase();
   }
 }
 

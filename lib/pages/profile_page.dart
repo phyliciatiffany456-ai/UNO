@@ -341,7 +341,12 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ? Image.network(
                                         post.imageUrls.first,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) =>
+                                        errorBuilder:
+                                            (
+                                              BuildContext context,
+                                              Object error,
+                                              StackTrace? stackTrace,
+                                            ) =>
                                             const ColoredBox(
                                           color: Color(0xFFC8C8C8),
                                         ),

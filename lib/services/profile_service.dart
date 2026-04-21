@@ -51,7 +51,7 @@ class ProfileService {
     await _client.from('profiles').upsert(<String, dynamic>{
       'user_id': user.id,
       'full_name': _nameFromUser(user),
-      'role': 'UNO Member',
+      'role': 'Role',
     }, onConflict: 'user_id');
 
     final List<Map<String, dynamic>> fallback = await _client
@@ -91,7 +91,7 @@ class ProfileService {
       'gender': gender.trim(),
       'education': education.trim(),
       'work_experience': workExperience.trim(),
-      'role': role.trim().isEmpty ? 'UNO Member' : role.trim(),
+      'role': role.trim().isEmpty ? 'Role' : role.trim(),
       'updated_at': DateTime.now().toIso8601String(),
     };
     if (avatarUrl != null) {
@@ -104,7 +104,7 @@ class ProfileService {
         data: <String, dynamic>{
           'full_name': fullName.trim(),
           'bio': bio.trim(),
-          'role': role.trim().isEmpty ? 'UNO Member' : role.trim(),
+          'role': role.trim().isEmpty ? 'Role' : role.trim(),
           if (avatarUrl != null) 'avatar_url': avatarUrl.trim(),
         },
       ),
@@ -155,7 +155,7 @@ class ProfileService {
               : '-',
       role: (row['role'] as String?)?.trim().isNotEmpty == true
           ? row['role'].toString()
-          : 'UNO Member',
+          : 'Role',
       avatarUrl: (row['avatar_url'] as String?)?.trim().isNotEmpty == true
           ? row['avatar_url'].toString()
           : null,

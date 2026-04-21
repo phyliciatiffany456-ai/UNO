@@ -160,8 +160,13 @@ class _CommunityPageState extends State<CommunityPage> {
             ElevatedButton(
               onPressed: () async {
                 final String groupName = nameController.text.trim();
+                final NavigatorState dialogNavigator = Navigator.of(
+                  dialogContext,
+                );
+                final ScaffoldMessengerState dialogMessenger =
+                    ScaffoldMessenger.of(dialogContext);
                 if (groupName.isEmpty) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  dialogMessenger.showSnackBar(
                     const SnackBar(content: Text('Nama grup wajib diisi.')),
                   );
                   return;
@@ -170,8 +175,8 @@ class _CommunityPageState extends State<CommunityPage> {
                   final String roomId = await _chatService.createGroupRoom(
                     name: groupName,
                   );
-                  if (!mounted) return;
-                  Navigator.of(dialogContext).pop(true);
+                  if (!dialogContext.mounted || !mounted) return;
+                  dialogNavigator.pop(true);
                   await _loadCommunity();
                   if (!mounted) return;
                   await Navigator.of(context).push(
@@ -184,8 +189,8 @@ class _CommunityPageState extends State<CommunityPage> {
                     ),
                   );
                 } catch (error) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  if (!dialogContext.mounted || !mounted) return;
+                  dialogMessenger.showSnackBar(
                     SnackBar(content: Text('Gagal membuat grup: $error')),
                   );
                 }
@@ -241,13 +246,18 @@ class _CommunityPageState extends State<CommunityPage> {
             ),
             ElevatedButton(
               onPressed: () async {
+                final NavigatorState dialogNavigator = Navigator.of(
+                  dialogContext,
+                );
+                final ScaffoldMessengerState dialogMessenger =
+                    ScaffoldMessenger.of(dialogContext);
                 try {
                   await _chatService.joinGroupByCode(codeController.text);
-                  if (!mounted) return;
-                  Navigator.of(dialogContext).pop(true);
+                  if (!dialogContext.mounted || !mounted) return;
+                  dialogNavigator.pop(true);
                 } catch (error) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  if (!dialogContext.mounted || !mounted) return;
+                  dialogMessenger.showSnackBar(
                     SnackBar(content: Text('Gagal masuk grup: $error')),
                   );
                 }
@@ -456,7 +466,8 @@ class _CommunityPageState extends State<CommunityPage> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       itemCount: _communityPeople.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (BuildContext context, int index) =>
+          const SizedBox(height: 10),
       itemBuilder: (BuildContext context, int index) {
         final StoryItem person = _communityPeople[index];
         final String label = person.label;

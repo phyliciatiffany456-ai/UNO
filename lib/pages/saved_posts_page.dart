@@ -34,7 +34,8 @@ class SavedPostsPage extends StatelessWidget {
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
                   itemCount: savedPosts.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  separatorBuilder: (BuildContext context, int index) =>
+                      const SizedBox(height: 10),
                   itemBuilder: (BuildContext context, int index) {
                     final PostItem post = savedPosts[index];
                     return Container(

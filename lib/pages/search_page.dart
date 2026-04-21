@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/post_item.dart';
+import '../models/post_streak.dart';
 import '../navigation/app_routes.dart';
 import '../services/post_service.dart';
 import '../widgets/bottom_nav.dart';
@@ -21,6 +22,7 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _controller = TextEditingController();
   final PostService _postService = PostService();
   List<PostItem> _allPosts = <PostItem>[];
+  Map<String, int> _authorStreaks = <String, int>{};
   bool _loading = true;
 
   @override
@@ -59,6 +61,7 @@ class _SearchPageState extends State<SearchPage> {
       if (!mounted) return;
       setState(() {
         _allPosts = posts;
+        _authorStreaks = PostStreak.buildByAuthor(posts);
       });
     } finally {
       if (mounted) {
@@ -171,13 +174,15 @@ class _SearchPageState extends State<SearchPage> {
                         child: ListView.separated(
                           shrinkWrap: true,
                           itemCount: _filteredPosts.length,
-                          separatorBuilder: (_, __) =>
+                          separatorBuilder:
+                              (BuildContext context, int index) =>
                               const SizedBox(height: 8),
                           itemBuilder: (BuildContext context, int index) {
                             final PostItem post = _filteredPosts[index];
                             return _SearchTile(
                               username: post.name,
                               text: post.role,
+                              streakDays: _authorStreaks[post.authorId],
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute<void>(
@@ -213,11 +218,13 @@ class _SearchTile extends StatelessWidget {
   const _SearchTile({
     required this.username,
     required this.text,
+    required this.streakDays,
     required this.onTap,
   });
 
   final String username;
   final String text;
+  final int? streakDays;
   final VoidCallback onTap;
 
   @override
@@ -276,10 +283,26 @@ class _SearchTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            const Icon(
-              Icons.local_fire_department,
-              color: Color(0xFFFFA84D),
-              size: 18,
+            Column(
+              children: [
+                Icon(
+                  Icons.local_fire_department,
+                  color: streakDays != null
+                      ? const Color(0xFFFFA84D)
+                      : const Color(0xFF6B7280),
+                  size: 18,
+                ),
+                Text(
+                  streakDays?.toString() ?? '-',
+                  style: TextStyle(
+                    color: streakDays != null
+                        ? const Color(0xFFFFB27D)
+                        : const Color(0xFF9CA3AF),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

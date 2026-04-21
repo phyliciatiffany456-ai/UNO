@@ -30,7 +30,7 @@ class _HomePageState extends State<HomePage> {
   final SocialService _socialService = SocialService();
   List<StoryItem> stories = <StoryItem>[];
   List<PostItem> _posts = <PostItem>[];
-  Set<String> _usersWithStory = <String>{};
+  final Set<String> _usersWithStory = <String>{};
   bool _loadingPosts = true;
 
   @override
@@ -98,27 +98,45 @@ class _HomePageState extends State<HomePage> {
       final DateTime? latestPostAt = posts.isNotEmpty
           ? posts.first.createdAt
           : null;
-      final String? latestAuthorId = posts.isNotEmpty
-          ? posts.first.authorId
+      final Set<String> followingIds = await _socialService.getFollowingIds();
+      final Map<String, DateTime> followingSinceByAuthor =
+          await _socialService.getFollowingSinceMap(userId: user.id);
+      final List<PostItem> notificationPosts = posts.where((PostItem post) {
+        final DateTime? followedAt = followingSinceByAuthor[post.authorId];
+        final DateTime? createdAt = post.createdAt;
+        if (post.authorId == user.id) return false;
+        if (followedAt == null || createdAt == null) return false;
+        return !createdAt.isBefore(followedAt);
+      }).toList();
+      final DateTime? latestNotificationPostAt = notificationPosts.isNotEmpty
+          ? notificationPosts.first.createdAt
+          : null;
+      final String? latestNotificationAuthorId = notificationPosts.isNotEmpty
+          ? notificationPosts.first.authorId
           : null;
 
       NotificationStore.syncWithLatestPost(
-        latestPostAt,
-        latestAuthorId: latestAuthorId,
+        latestNotificationPostAt ?? latestPostAt,
+        latestAuthorId: latestNotificationAuthorId,
         currentUserId: user.id,
       );
-
-      final Set<String> followingIds = await _socialService.getFollowingIds();
 
       final builtStories = _buildStories(
         posts,
         currentUserId: user.id,
         followingIds: followingIds,
       );
+      final Set<String> usersWithStory = builtStories
+          .map((StoryItem story) => story.authorId ?? '')
+          .where((String authorId) => authorId.isNotEmpty)
+          .toSet();
 
       setState(() {
         _posts = posts;
         stories = builtStories;
+        _usersWithStory
+          ..clear()
+          ..addAll(usersWithStory);
       });
     } catch (_) {
       _showMessage('Gagal memuat feed dari database.');

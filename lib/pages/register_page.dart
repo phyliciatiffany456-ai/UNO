@@ -90,10 +90,10 @@ class _RegisterPageState extends State<RegisterPage> {
           );
         }
       } else {
-        _showMessage(error.message);
+        _showMessage(_authService.readableError(error));
       }
-    } catch (_) {
-      _showMessage('Register gagal. Coba lagi sebentar.');
+    } catch (error) {
+      _showMessage(_authService.readableError(error));
     } finally {
       if (mounted) {
         setState(() {

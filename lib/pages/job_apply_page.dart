@@ -288,7 +288,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
             child: Ink(
               decoration: BoxDecoration(
                 color: isActive
-                    ? activeColor.withOpacity(0.22)
+                    ? activeColor.withValues(alpha: 0.22)
                     : isProcessing
                     ? const Color(0xFF1A1D24)
                     : const Color(0xFF0E1014),
@@ -452,7 +452,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
                     firstDate: DateTime(now.year, now.month, now.day),
                     lastDate: DateTime(now.year + 3),
                   );
-                  if (pickedDate == null) return;
+                  if (!dialogContext.mounted || pickedDate == null) return;
 
                   final TimeOfDay initialTime = selectedDate != null
                       ? TimeOfDay.fromDateTime(selectedDate!)
@@ -853,7 +853,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
                               border: Border.all(
                                 color: (item.status == 'accepted' ||
                                         item.status == 'rejected')
-                                    ? statusColor.withOpacity(0.8)
+                                    ? statusColor.withValues(alpha: 0.8)
                                     : const Color(0xFF2D313B),
                               ),
                             ),
@@ -882,10 +882,10 @@ class _JobApplyPageState extends State<JobApplyPage> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.18),
+                                    color: statusColor.withValues(alpha: 0.18),
                                     borderRadius: BorderRadius.circular(999),
                                     border: Border.all(
-                                      color: statusColor.withOpacity(0.9),
+                                      color: statusColor.withValues(alpha: 0.9),
                                     ),
                                   ),
                                   child: Text(
@@ -945,7 +945,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
                                       onTap: () => _openDirectChat(
                                         otherUserId: item.applicantId,
                                         otherUserName: item.applicantName,
-                                        roomTitle: 'HR - ${item.applicantName}',
+                                        roomTitle: item.applicantName,
                                       ),
                                       height: 34,
                                       fontSize: 11,
@@ -1091,7 +1091,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
                               onTap: () => _openDirectChat(
                                 otherUserId: widget.post.authorId,
                                 otherUserName: widget.post.name,
-                                roomTitle: 'HR - ${widget.post.name}',
+                                roomTitle: widget.post.name,
                               ),
                               height: 38,
                               fontSize: 12,

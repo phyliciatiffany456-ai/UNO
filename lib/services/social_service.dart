@@ -44,6 +44,16 @@ class UserMiniProfile {
   final String role;
 }
 
+class FollowingSinceRecord {
+  const FollowingSinceRecord({
+    required this.followingId,
+    required this.followedAt,
+  });
+
+  final String followingId;
+  final DateTime followedAt;
+}
+
 class SocialService {
   SocialService({SupabaseClient? client})
       : _client = client ?? Supabase.instance.client;
@@ -160,6 +170,16 @@ class SocialService {
     });
   }
 
+  Future<bool> sharePost(String postId) async {
+    final User user = _requireUser();
+
+    await _client.from('post_shares').insert(<String, dynamic>{
+      'post_id': postId,
+      'user_id': user.id,
+    });
+    return true;
+  }
+
   Future<void> addComment({
     required String postId,
     required String content,
@@ -212,6 +232,30 @@ class SocialService {
     return rows
         .map((Map<String, dynamic> row) => row['following_id'].toString())
         .toSet();
+  }
+
+  Future<Map<String, DateTime>> getFollowingSinceMap({String? userId}) async {
+    final String? followerId = userId ?? currentUser?.id;
+    if (followerId == null || followerId.isEmpty) {
+      return <String, DateTime>{};
+    }
+
+    final List<Map<String, dynamic>> rows = await _client
+        .from('user_follows')
+        .select('following_id,created_at')
+        .eq('follower_id', followerId);
+
+    final Map<String, DateTime> followingSince = <String, DateTime>{};
+    for (final Map<String, dynamic> row in rows) {
+      final String followingId = row['following_id'].toString();
+      final DateTime? followedAt = DateTime.tryParse(
+        (row['created_at'] as String?) ?? '',
+      );
+      if (followedAt != null) {
+        followingSince[followingId] = followedAt;
+      }
+    }
+    return followingSince;
   }
 
   Future<void> followUser(String targetUserId) async {
@@ -286,7 +330,7 @@ class SocialService {
             : 'User',
         role: (row?['role'] as String?)?.trim().isNotEmpty == true
             ? row!['role'].toString()
-            : 'UNO Member',
+            : 'Role',
       );
     }).toList();
   }

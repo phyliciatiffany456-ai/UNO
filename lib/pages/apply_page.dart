@@ -122,7 +122,8 @@ class _ApplyPageState extends State<ApplyPage> {
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                         itemCount: _jobs.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (BuildContext context, int index) =>
+                            const SizedBox(height: 12),
                         itemBuilder: (BuildContext context, int index) {
                           final PostItem job = _jobs[index];
                           final String? currentUserId =
