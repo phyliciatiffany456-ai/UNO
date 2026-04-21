@@ -44,6 +44,7 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
   List<ChatMessageItem> _cachedMessages = <ChatMessageItem>[];
   List<ChatMessageItem> _pendingMessages = <ChatMessageItem>[];
   bool _sending = false;
+  int _groupActivityStreak = 0;
 
   @override
   void initState() {
@@ -214,6 +215,27 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
       (ChatMessageItem a, ChatMessageItem b) => a.createdAt.compareTo(b.createdAt),
     );
     return merged;
+  }
+
+  int _calculateGroupActivityStreak(List<ChatMessageItem> messages) {
+    if (messages.isEmpty) return 0;
+
+    final Set<DateTime> activeDays = messages
+        .map((ChatMessageItem item) => _dateOnly(item.createdAt.toLocal()))
+        .toSet();
+    int streak = 0;
+    DateTime cursor = _dateOnly(DateTime.now());
+
+    while (activeDays.contains(cursor)) {
+      streak += 1;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  DateTime _dateOnly(DateTime value) {
+    return DateTime(value.year, value.month, value.day);
   }
 
   Future<void> _openScheduleDialog() async {
@@ -604,6 +626,17 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                                 : const Color(0xFF34D399),
                             size: 18,
                           ),
+                          if (isGroup) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '$_groupActivityStreak',
+                              style: const TextStyle(
+                                color: Color(0xFFFFC27A),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 14),
@@ -642,6 +675,19 @@ class _ChatBoxPageState extends State<ChatBoxPage> {
                                       _mergeMessages(
                                         snapshot.data ?? <ChatMessageItem>[],
                                       );
+                                  final int nextGroupStreak = isGroup
+                                      ? _calculateGroupActivityStreak(messages)
+                                      : 0;
+                                  if (_groupActivityStreak != nextGroupStreak) {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (!mounted) return;
+                                          setState(() {
+                                            _groupActivityStreak =
+                                                nextGroupStreak;
+                                          });
+                                        });
+                                  }
                                   _cachedMessages = messages;
                                   _scrollToBottom();
                                   final String myId =

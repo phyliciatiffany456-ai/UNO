@@ -39,6 +39,8 @@ class ChatService {
     : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
+  static const String _groupCodeChars =
+      'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
   User? get currentUser => _client.auth.currentUser;
 
@@ -141,7 +143,9 @@ class ChatService {
         'member_ids': <String>[],
       },
     );
-    return result.toString();
+    final String roomId = result.toString();
+    await _assignRandomGroupCode(roomId);
+    return roomId;
   }
 
   Future<void> joinGroupByCode(String roomCode) async {
@@ -175,6 +179,38 @@ class ChatService {
       counts[roomId] = (counts[roomId] ?? 0) + 1;
     }
     return counts;
+  }
+
+  Future<void> _assignRandomGroupCode(String roomId) async {
+    for (int attempt = 0; attempt < 8; attempt += 1) {
+      final String code = _generateRandomGroupCode();
+      final List<Map<String, dynamic>> existing = await _client
+          .from('chat_rooms')
+          .select('id')
+          .eq('room_code', code)
+          .limit(1);
+      if (existing.isNotEmpty) {
+        continue;
+      }
+
+      await _client
+          .from('chat_rooms')
+          .update(<String, dynamic>{'room_code': code})
+          .eq('id', roomId);
+      return;
+    }
+    throw Exception('Gagal membuat kode grup acak. Coba lagi.');
+  }
+
+  String _generateRandomGroupCode() {
+    final DateTime now = DateTime.now();
+    int seed = now.microsecondsSinceEpoch ^ now.millisecondsSinceEpoch;
+    final StringBuffer buffer = StringBuffer();
+    for (int i = 0; i < 6; i += 1) {
+      seed = (seed * 1664525 + 1013904223) & 0x7fffffff;
+      buffer.write(_groupCodeChars[seed % _groupCodeChars.length]);
+    }
+    return buffer.toString();
   }
 
   Future<List<ChatMessageItem>> fetchMessages(String roomId) async {
