@@ -51,13 +51,17 @@ class ChatService {
         .select('room_id,chat_rooms(id,name,is_group,created_by,room_code)')
         .eq('user_id', user.id);
 
-    final List<String> roomIds = memberRows
+    final List<Map<String, dynamic>> normalizedRows = await _ensureMissingGroupCodes(
+      memberRows,
+    );
+
+    final List<String> roomIds = normalizedRows
         .map((Map<String, dynamic> row) => row['room_id'].toString())
         .where((String id) => id.isNotEmpty && id != 'null')
         .toList();
     final Map<String, int> memberCounts = await _fetchMemberCounts(roomIds);
 
-    return memberRows.map((Map<String, dynamic> row) {
+    return normalizedRows.map((Map<String, dynamic> row) {
       final Map<String, dynamic> room =
           row['chat_rooms'] as Map<String, dynamic>? ?? <String, dynamic>{};
       final String roomId = room['id'].toString();
@@ -181,7 +185,30 @@ class ChatService {
     return counts;
   }
 
-  Future<void> _assignRandomGroupCode(String roomId) async {
+  Future<List<Map<String, dynamic>>> _ensureMissingGroupCodes(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final List<Map<String, dynamic>> normalizedRows = <Map<String, dynamic>>[];
+
+    for (final Map<String, dynamic> row in rows) {
+      final Map<String, dynamic> room = Map<String, dynamic>.from(
+        row['chat_rooms'] as Map<String, dynamic>? ?? <String, dynamic>{},
+      );
+      final bool isGroup = room['is_group'] as bool? ?? false;
+      final String roomId = room['id']?.toString() ?? '';
+      final String currentCode = room['room_code']?.toString().trim() ?? '';
+
+      if (isGroup && roomId.isNotEmpty && currentCode.isEmpty) {
+        room['room_code'] = await _assignRandomGroupCode(roomId);
+      }
+
+      normalizedRows.add(<String, dynamic>{...row, 'chat_rooms': room});
+    }
+
+    return normalizedRows;
+  }
+
+  Future<String> _assignRandomGroupCode(String roomId) async {
     for (int attempt = 0; attempt < 8; attempt += 1) {
       final String code = _generateRandomGroupCode();
       final List<Map<String, dynamic>> existing = await _client
@@ -197,7 +224,7 @@ class ChatService {
           .from('chat_rooms')
           .update(<String, dynamic>{'room_code': code})
           .eq('id', roomId);
-      return;
+      return code;
     }
     throw Exception('Gagal membuat kode grup acak. Coba lagi.');
   }
