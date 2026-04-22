@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/social_service.dart';
+import '../widgets/story_ring_avatar.dart';
 
 enum ConnectionTab { followers, following }
 
@@ -117,22 +118,20 @@ class _ProfileConnectionsPageState extends State<ProfileConnectionsPage> {
                     itemBuilder: (BuildContext context, int index) {
                       final UserMiniProfile item = data[index];
                       return Container(
-                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF13151A),
+                          color: const Color(0xFF0E1014),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF24262E)),
+                          border: Border.all(color: const Color(0xFF2D313B)),
                         ),
                         child: Row(
                           children: [
-                            const CircleAvatar(
-                              radius: 15,
-                              backgroundColor: Color(0xFFE5E7EB),
-                              child: Icon(
-                                Icons.person,
-                                size: 15,
-                                color: Color(0xFF121417),
-                              ),
+                            StoryRingProfileAvatar(
+                              size: 32,
+                              viewed: false,
+                              hasStory: false,
+                              label: item.name,
+                              imageUrl: item.avatarUrl,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -145,13 +144,14 @@ class _ProfileConnectionsPageState extends State<ProfileConnectionsPage> {
                                       color: Colors.white,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
+                                      fontStyle: FontStyle.italic,
                                     ),
                                   ),
                                   Text(
                                     item.role,
                                     style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 10,
+                                      color: Color(0xFF9CA3AF),
+                                      fontSize: 11,
                                     ),
                                   ),
                                 ],
