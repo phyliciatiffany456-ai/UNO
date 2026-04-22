@@ -11,7 +11,7 @@ class UnoApp extends StatelessWidget {
     final bool isLoggedIn = Supabase.instance.client.auth.currentUser != null;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'UNO LinkedIn Social',
+      title: 'UNO',
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFF0F1013),
         appBarTheme: const AppBarTheme(
