@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'models/story_seen_store.dart';
 
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const _supabasePublishableKey = String.fromEnvironment(
@@ -25,6 +26,7 @@ Future<void> main() async {
     url: _supabaseUrl,
     anonKey: _supabasePublishableKey,
   );
+  await StorySeenStore.init();
 
   runApp(const UnoApp());
 }

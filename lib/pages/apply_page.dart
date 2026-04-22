@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../models/story_seen_store.dart';
 import '../navigation/app_routes.dart';
 import '../services/post_service.dart';
 import '../widgets/app_button.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/story_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
 import 'job_apply_page.dart';
@@ -21,16 +23,28 @@ class ApplyPage extends StatefulWidget {
 }
 
 class _ApplyPageState extends State<ApplyPage> {
-  final Set<String> _viewedProfiles = <String>{};
   final PostService _postService = PostService();
 
   List<PostItem> _jobs = <PostItem>[];
+  Map<String, List<String>> _activeStoryIdsByAuthor = <String, List<String>>{};
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    StorySeenStore.changes.addListener(_handleSeenStoreChanged);
     _loadJobs();
+  }
+
+  @override
+  void dispose() {
+    StorySeenStore.changes.removeListener(_handleSeenStoreChanged);
+    super.dispose();
+  }
+
+  void _handleSeenStoreChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _loadJobs() async {
@@ -40,9 +54,25 @@ class _ApplyPageState extends State<ApplyPage> {
 
     try {
       final List<PostItem> posts = await _postService.fetchFeed();
+      final DateTime threshold = DateTime.now().subtract(
+        const Duration(days: 1),
+      );
+      final Map<String, List<String>> activeStoryIdsByAuthor =
+          <String, List<String>>{};
+      for (final PostItem post in posts.where(
+        (PostItem post) =>
+            post.type == PostType.short &&
+            post.createdAt != null &&
+            post.createdAt!.isAfter(threshold),
+      )) {
+        activeStoryIdsByAuthor.putIfAbsent(post.authorId, () => <String>[]).add(
+          post.id,
+        );
+      }
       if (!mounted) return;
       setState(() {
         _jobs = posts.where((PostItem post) => post.type == PostType.job).toList();
+        _activeStoryIdsByAuthor = activeStoryIdsByAuthor;
       });
     } catch (_) {
       if (!mounted) return;
@@ -70,16 +100,24 @@ class _ApplyPageState extends State<ApplyPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const SearchPage()));
   }
 
-  Future<void> _openStory(BuildContext context, String label) async {
+  Future<void> _openStory(BuildContext context, PostItem job) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryViewerPage(story: StoryItem(label: label)),
+        builder: (_) => StoryViewerPage(
+          story: StoryItem(
+            label: job.name,
+            authorId: job.authorId,
+            avatarUrl: job.avatarUrl,
+            storyIds: _activeStoryIdsByAuthor[job.authorId] ?? const <String>[],
+            isViewed: StorySeenStore.hasSeenAllStoryIds(
+              _activeStoryIdsByAuthor[job.authorId] ?? const <String>[],
+            ),
+          ),
+        ),
       ),
     );
     if (!mounted) return;
-    setState(() {
-      _viewedProfiles.add(label);
-    });
+    setState(() {});
   }
 
   @override
@@ -134,19 +172,17 @@ class _ApplyPageState extends State<ApplyPage> {
                           return _JobCard(
                             title: job.jobTitle ?? job.content,
                             profileName: job.name,
+                            avatarUrl: job.avatarUrl,
                             salary: _deadlineText(job),
                             city: job.jobLocation ?? job.role,
                             domicile: job.jobDomicile ?? '-',
                             requirements: job.jobRequirements ?? '-',
-                            chips: <String>[
-                              'Job',
-                              isOwner
-                                  ? 'Review Kandidat'
-                                  : (isClosed ? 'Closed' : 'Apply Sekarang'),
-                              'UNO',
-                            ],
-                            isProfileViewed: _viewedProfiles.contains(job.name),
-                            onProfileTap: () => _openStory(context, job.name),
+                            chips: _criteriaChips(job.jobRequirements),
+                            isProfileViewed: StorySeenStore.hasSeenAllStoryIds(
+                              _activeStoryIdsByAuthor[job.authorId] ??
+                                  const <String>[],
+                            ),
+                            onProfileTap: () => _openStory(context, job),
                             onApplyTap: canOpenApply
                                 ? () => Navigator.of(context).push(
                                     MaterialPageRoute<void>(
@@ -194,12 +230,58 @@ class _ApplyPageState extends State<ApplyPage> {
     final bool closed = _isJobClosed(job);
     return '${closed ? 'Closed' : 'Deadline'} $day/$month/${deadline.year} $hour:$minute';
   }
+
+  List<String> _criteriaChips(String? rawRequirements) {
+    final String requirements = (rawRequirements ?? '').trim();
+    if (requirements.isEmpty) {
+      return <String>['Tidak ada kriteria'];
+    }
+
+    final List<String> parts = requirements
+        .split(RegExp(r'[\n,;|/]+'))
+        .map((String item) => item.trim())
+        .expand((String item) => item.split(RegExp(r'\s+-\s+|\s+dan\s+')))
+        .map((String item) => item.trim())
+        .where((String item) => item.isNotEmpty)
+        .map(_normalizeCriteriaChip)
+        .where((String item) => item.isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) {
+      return <String>[_normalizeCriteriaChip(requirements)];
+    }
+
+    final List<String> unique = <String>[];
+    for (final String part in parts) {
+      final bool exists = unique.any(
+        (String current) => current.toLowerCase() == part.toLowerCase(),
+      );
+      if (!exists) {
+        unique.add(part);
+      }
+      if (unique.length == 6) break;
+    }
+    return unique;
+  }
+
+  String _normalizeCriteriaChip(String value) {
+    String cleaned = value
+        .replaceAll(RegExp(r'^[\-\u2022\d\.\)\s]+'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (cleaned.isEmpty) return '';
+    if (cleaned.length > 28) {
+      cleaned = '${cleaned.substring(0, 25).trim()}...';
+    }
+    return cleaned;
+  }
 }
 
 class _JobCard extends StatelessWidget {
   const _JobCard({
     required this.title,
     required this.profileName,
+    this.avatarUrl,
     required this.salary,
     required this.city,
     required this.domicile,
@@ -213,6 +295,7 @@ class _JobCard extends StatelessWidget {
 
   final String title;
   final String profileName;
+  final String? avatarUrl;
   final String salary;
   final String city;
   final String domicile;
@@ -270,6 +353,7 @@ class _JobCard extends StatelessWidget {
               children: [
                 _StoryProfile(
                   label: profileName,
+                  avatarUrl: avatarUrl,
                   viewed: isProfileViewed,
                   onTap: onProfileTap,
                 ),
@@ -289,12 +373,6 @@ class _JobCard extends StatelessWidget {
               style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
             const SizedBox(height: 2),
-            Text(
-              'Kriteria: $requirements',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            ),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -354,9 +432,15 @@ class _SkillChip extends StatelessWidget {
 }
 
 class _StoryProfile extends StatelessWidget {
-  const _StoryProfile({required this.label, required this.viewed, this.onTap});
+  const _StoryProfile({
+    required this.label,
+    this.avatarUrl,
+    required this.viewed,
+    this.onTap,
+  });
 
   final String label;
+  final String? avatarUrl;
   final bool viewed;
   final VoidCallback? onTap;
 
@@ -369,43 +453,13 @@ class _StoryProfile extends StatelessWidget {
         onTap: onTap,
         child: Column(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: viewed ? const Color(0xFF6B7280) : const Color(0xFF2D313B),
-              ),
-              child: Center(
-                child: Container(
-                  width: 46,
-                  height: 46,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF0F1013),
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFFE5E7EB),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _initials(label),
-                          style: const TextStyle(
-                            color: Color(0xFF121417),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            StoryRingProfileAvatar(
+              size: 52,
+              viewed: viewed,
+              hasStory: true,
+              label: label,
+              imageUrl: avatarUrl,
+              onTap: onTap,
             ),
             const SizedBox(height: 6),
             Text(
@@ -424,13 +478,4 @@ class _StoryProfile extends StatelessWidget {
     );
   }
 
-  String _initials(String raw) {
-    final List<String> words = raw
-        .split(' ')
-        .where((String word) => word.trim().isNotEmpty)
-        .toList();
-    if (words.isEmpty) return 'U';
-    if (words.length == 1) return words.first.substring(0, 1).toUpperCase();
-    return '${words[0][0]}${words[1][0]}'.toUpperCase();
-  }
 }

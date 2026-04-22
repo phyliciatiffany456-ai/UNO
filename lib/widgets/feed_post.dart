@@ -9,6 +9,7 @@ import '../pages/chat_profile_info_page.dart';
 import '../pages/job_apply_page.dart';
 import '../pages/saved_posts_page.dart';
 import '../pages/story_viewer_page.dart';
+import '../services/post_service.dart';
 import '../services/social_service.dart';
 import 'app_button.dart';
 import 'expandable_text.dart';
@@ -33,6 +34,7 @@ class FeedPost extends StatefulWidget {
 
 class _FeedPostState extends State<FeedPost> {
   final SocialService _socialService = SocialService();
+  final PostService _postService = PostService();
 
   late bool _isFollowed;
   late bool _isStoryViewed;
@@ -44,6 +46,7 @@ class _FeedPostState extends State<FeedPost> {
   bool _shared = false;
   bool _saved = false;
   int _currentImageIndex = 0;
+  List<String> _activeStoryIds = <String>[];
 
   void _openOwnerProfile(PostItem post) {
     Navigator.of(context).push(
@@ -75,16 +78,45 @@ class _FeedPostState extends State<FeedPost> {
   void initState() {
     super.initState();
     _isFollowed = widget.post.isFollowed;
-    _isStoryViewed = StorySeenStore.isSeen(
-      authorId: widget.post.authorId,
-      label: widget.post.name,
-    );
+    _isStoryViewed = false;
     _likeCount = widget.post.likeCount;
     _commentCount = widget.post.commentCount;
     _shareCount = widget.post.shareCount;
     _liked = widget.post.isLiked;
     _shared = widget.post.isShared;
     _saved = SavedPostStore.contains(widget.post.id);
+    StorySeenStore.changes.addListener(_handleSeenStoreChanged);
+    _refreshStoryViewed();
+  }
+
+  @override
+  void dispose() {
+    StorySeenStore.changes.removeListener(_handleSeenStoreChanged);
+    super.dispose();
+  }
+
+  void _handleSeenStoreChanged() {
+    _refreshStoryViewed();
+  }
+
+  Future<void> _refreshStoryViewed() async {
+    if (!widget.hasStory) return;
+    final List<PostItem> shorts = await _postService.fetchShortPostsByAuthor(
+      widget.post.authorId,
+    );
+    final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+    final List<String> activeStoryIds = shorts
+        .where(
+          (PostItem item) =>
+              item.createdAt != null && item.createdAt!.isAfter(threshold),
+        )
+        .map((PostItem item) => item.id)
+        .toList();
+    if (!mounted) return;
+    setState(() {
+      _activeStoryIds = activeStoryIds;
+      _isStoryViewed = StorySeenStore.hasSeenAllStoryIds(activeStoryIds);
+    });
   }
 
   @override
@@ -716,14 +748,7 @@ class _FeedPostState extends State<FeedPost> {
                   ),
                 ),
               );
-              StorySeenStore.markSeen(
-                authorId: post.authorId,
-                label: post.name,
-              );
-              if (!mounted) return;
-              setState(() {
-                _isStoryViewed = true;
-              });
+              await _refreshStoryViewed();
             }
           : null,
     );

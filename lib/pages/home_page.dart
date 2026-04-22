@@ -37,7 +37,27 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    StorySeenStore.changes.addListener(_handleSeenStoreChanged);
     _loadFeed();
+  }
+
+  @override
+  void dispose() {
+    StorySeenStore.changes.removeListener(_handleSeenStoreChanged);
+    super.dispose();
+  }
+
+  void _handleSeenStoreChanged() {
+    if (!mounted) return;
+    setState(() {
+      stories = stories
+          .map(
+            (StoryItem story) => story.copyWith(
+              isViewed: StorySeenStore.hasSeenAllStoryIds(story.storyIds),
+            ),
+          )
+          .toList();
+    });
   }
 
   Future<void> _openStory(int index) async {
@@ -46,10 +66,11 @@ class _HomePageState extends State<HomePage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: story)),
     );
-    StorySeenStore.markSeen(authorId: story.authorId, label: story.label);
     if (!mounted) return;
     setState(() {
-      stories[index] = story.copyWith(isViewed: true);
+      stories[index] = story.copyWith(
+        isViewed: StorySeenStore.hasSeenAllStoryIds(story.storyIds),
+      );
     });
   }
 
@@ -159,7 +180,7 @@ class _HomePageState extends State<HomePage> {
     required Set<String> followingIds,
   }) {
     final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
-    final Map<String, PostItem> latestStoryByAuthor = <String, PostItem>{};
+    final Map<String, List<PostItem>> storiesByAuthor = <String, List<PostItem>>{};
 
     for (final PostItem post in posts) {
       if (post.type != PostType.short) continue;
@@ -168,10 +189,12 @@ class _HomePageState extends State<HomePage> {
       final bool isMine = post.authorId == currentUserId;
       final bool isFollowed = followingIds.contains(post.authorId);
       if (!isMine && !isFollowed) continue;
-      latestStoryByAuthor.putIfAbsent(post.authorId, () => post);
+      storiesByAuthor.putIfAbsent(post.authorId, () => <PostItem>[]).add(post);
     }
 
-    final List<PostItem> orderedStories = latestStoryByAuthor.values.toList()
+    final List<PostItem> orderedStories = storiesByAuthor.values
+        .map((List<PostItem> items) => items.first)
+        .toList()
       ..sort((PostItem a, PostItem b) {
         final bool aMine = a.authorId == currentUserId;
         final bool bMine = b.authorId == currentUserId;
@@ -190,10 +213,15 @@ class _HomePageState extends State<HomePage> {
             label: post.name,
             authorId: post.authorId,
             avatarUrl: post.avatarUrl,
+            storyIds: storiesByAuthor[post.authorId]
+                    ?.map((PostItem item) => item.id)
+                    .toList() ??
+                const <String>[],
             isMine: post.authorId == currentUserId,
-            isViewed: StorySeenStore.isSeen(
-              authorId: post.authorId,
-              label: post.name,
+            isViewed: StorySeenStore.hasSeenAllStoryIds(
+              storiesByAuthor[post.authorId]
+                      ?.map((PostItem item) => item.id) ??
+                  const <String>[],
             ),
           ),
         )

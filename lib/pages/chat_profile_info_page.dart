@@ -104,9 +104,15 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
               p.createdAt != null &&
               p.createdAt!.isAfter(threshold),
         );
-        _viewedStory = StorySeenStore.isSeen(
-          authorId: targetUserId,
-          label: _name,
+        _viewedStory = StorySeenStore.hasSeenAllStoryIds(
+          posts
+              .where(
+                (PostItem p) =>
+                    p.type == PostType.short &&
+                    p.createdAt != null &&
+                    p.createdAt!.isAfter(threshold),
+              )
+              .map((PostItem p) => p.id),
         );
       });
     } catch (_) {
@@ -134,10 +140,19 @@ class _ChatProfileInfoPageState extends State<ChatProfileInfoPage> {
         ),
       ),
     );
-    StorySeenStore.markSeen(authorId: userId, label: _name);
     if (!mounted) return;
     setState(() {
-      _viewedStory = true;
+      final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+      _viewedStory = StorySeenStore.hasSeenAllStoryIds(
+        _posts
+            .where(
+              (PostItem p) =>
+                  p.type == PostType.short &&
+                  p.createdAt != null &&
+                  p.createdAt!.isAfter(threshold),
+            )
+            .map((PostItem p) => p.id),
+      );
     });
   }
 

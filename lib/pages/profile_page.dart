@@ -91,9 +91,15 @@ class _ProfilePageState extends State<ProfilePage> {
               p.createdAt != null &&
               p.createdAt!.isAfter(threshold),
         );
-        _viewedProfileStory = StorySeenStore.isSeen(
-          authorId: user.id,
-          label: _displayName,
+        _viewedProfileStory = StorySeenStore.hasSeenAllStoryIds(
+          _myPosts
+              .where(
+                (PostItem p) =>
+                    p.type == PostType.short &&
+                    p.createdAt != null &&
+                    p.createdAt!.isAfter(threshold),
+              )
+              .map((PostItem p) => p.id),
         );
       });
     } catch (_) {
@@ -404,10 +410,19 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ),
     );
-    StorySeenStore.markSeen(authorId: myUserId, label: label);
     if (!mounted) return;
     setState(() {
-      _viewedProfileStory = true;
+      final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
+      _viewedProfileStory = StorySeenStore.hasSeenAllStoryIds(
+        _myPosts
+            .where(
+              (PostItem p) =>
+                  p.type == PostType.short &&
+                  p.createdAt != null &&
+                  p.createdAt!.isAfter(threshold),
+            )
+            .map((PostItem p) => p.id),
+      );
     });
   }
 

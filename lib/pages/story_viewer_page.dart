@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/post_item.dart';
 import '../models/story_item.dart';
+import '../models/story_seen_store.dart';
 import '../services/post_service.dart';
 import '../services/profile_service.dart';
 import '../widgets/pop_icon_button.dart';
@@ -91,6 +92,15 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
             : widget.story.avatarUrl;
       });
       if (shorts.isNotEmpty) {
+        final int firstUnseenIndex = shorts.indexWhere(
+          (PostItem post) => !StorySeenStore.isStorySeen(post.id),
+        );
+        _currentShort = firstUnseenIndex >= 0 ? firstUnseenIndex : 0;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_pageController.hasClients) return;
+          _pageController.jumpToPage(_currentShort);
+        });
+        unawaited(StorySeenStore.markStorySeen(shorts[_currentShort].id));
         _startShortTimer();
       }
     } catch (_) {
@@ -259,6 +269,11 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                                       setState(() {
                                         _currentShort = index;
                                       });
+                                      unawaited(
+                                        StorySeenStore.markStorySeen(
+                                          _shorts[index].id,
+                                        ),
+                                      );
                                       _startShortTimer();
                                     },
                                     itemCount: _shorts.length,

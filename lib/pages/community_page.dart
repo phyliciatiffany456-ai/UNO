@@ -97,7 +97,24 @@ class _CommunityPageState extends State<CommunityPage> {
         currentUserId: currentUserId,
         followingIds: followingIds,
       );
-      final List<StoryItem> people = await _buildCommunityPeople();
+      final Map<String, List<String>> activeStoryIdsByAuthor =
+          <String, List<String>>{};
+      final DateTime threshold = DateTime.now().subtract(
+        const Duration(days: 1),
+      );
+      for (final PostItem post in posts.where(
+        (PostItem post) =>
+            post.type == PostType.short &&
+            post.createdAt != null &&
+            post.createdAt!.isAfter(threshold),
+      )) {
+        activeStoryIdsByAuthor.putIfAbsent(post.authorId, () => <String>[]).add(
+          post.id,
+        );
+      }
+      final List<StoryItem> people = await _buildCommunityPeople(
+        activeStoryIdsByAuthor: activeStoryIdsByAuthor,
+      );
       final List<ChatRoomItem> groupRooms = await _chatService
           .fetchMyGroupRooms();
 
@@ -127,7 +144,7 @@ class _CommunityPageState extends State<CommunityPage> {
     required Set<String> followingIds,
   }) {
     final DateTime threshold = DateTime.now().subtract(const Duration(days: 1));
-    final Map<String, PostItem> latestStoryByAuthor = <String, PostItem>{};
+    final Map<String, List<PostItem>> storiesByAuthor = <String, List<PostItem>>{};
 
     for (final PostItem post in posts) {
       if (post.type != PostType.short) continue;
@@ -137,10 +154,12 @@ class _CommunityPageState extends State<CommunityPage> {
           currentUserId != null && post.authorId == currentUserId;
       final bool isFollowed = followingIds.contains(post.authorId);
       if (!isMine && !isFollowed) continue;
-      latestStoryByAuthor.putIfAbsent(post.authorId, () => post);
+      storiesByAuthor.putIfAbsent(post.authorId, () => <PostItem>[]).add(post);
     }
 
-    final List<PostItem> orderedStories = latestStoryByAuthor.values.toList()
+    final List<PostItem> orderedStories = storiesByAuthor.values
+        .map((List<PostItem> items) => items.first)
+        .toList()
       ..sort((PostItem a, PostItem b) {
         final bool aMine = currentUserId != null && a.authorId == currentUserId;
         final bool bMine = currentUserId != null && b.authorId == currentUserId;
@@ -159,10 +178,15 @@ class _CommunityPageState extends State<CommunityPage> {
             label: post.name,
             authorId: post.authorId,
             avatarUrl: post.avatarUrl,
+            storyIds: storiesByAuthor[post.authorId]
+                    ?.map((PostItem item) => item.id)
+                    .toList() ??
+                const <String>[],
             isMine: currentUserId != null && post.authorId == currentUserId,
-            isViewed: StorySeenStore.isSeen(
-              authorId: post.authorId,
-              label: post.name,
+            isViewed: StorySeenStore.hasSeenAllStoryIds(
+              storiesByAuthor[post.authorId]
+                      ?.map((PostItem item) => item.id) ??
+                  const <String>[],
             ),
           ),
         )
@@ -325,9 +349,13 @@ class _CommunityPageState extends State<CommunityPage> {
     }
   }
 
-  Future<List<StoryItem>> _buildCommunityPeople() async {
+  Future<List<StoryItem>> _buildCommunityPeople({
+    Map<String, List<String>>? activeStoryIdsByAuthor,
+  }) async {
     final String? myId = _socialService.currentUser?.id;
     if (myId == null) return <StoryItem>[];
+    final Map<String, List<String>> safeStoryIdsByAuthor =
+        activeStoryIdsByAuthor ?? <String, List<String>>{};
 
     final followed = await _socialService.getFollowing(myId);
     return followed
@@ -336,9 +364,9 @@ class _CommunityPageState extends State<CommunityPage> {
             label: user.name,
             authorId: user.userId,
             avatarUrl: user.avatarUrl,
-            isViewed: StorySeenStore.isSeen(
-              authorId: user.userId,
-              label: user.name,
+            storyIds: safeStoryIdsByAuthor[user.userId] ?? const <String>[],
+            isViewed: StorySeenStore.hasSeenAllStoryIds(
+              safeStoryIdsByAuthor[user.userId] ?? const <String>[],
             ),
           ),
         )
@@ -372,10 +400,11 @@ class _CommunityPageState extends State<CommunityPage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: story)),
     );
-    StorySeenStore.markSeen(authorId: story.authorId, label: story.label);
     if (!mounted) return;
     setState(() {
-      _stories[index] = story.copyWith(isViewed: true);
+      _stories[index] = story.copyWith(
+        isViewed: StorySeenStore.hasSeenAllStoryIds(story.storyIds),
+      );
     });
   }
 
@@ -383,17 +412,8 @@ class _CommunityPageState extends State<CommunityPage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => StoryViewerPage(story: person)),
     );
-    StorySeenStore.markSeen(authorId: person.authorId, label: person.label);
     if (!mounted) return;
-    setState(() {
-      _communityPeople = _communityPeople
-          .map(
-            (StoryItem item) => item.authorId == person.authorId
-                ? item.copyWith(isViewed: true)
-                : item,
-          )
-          .toList();
-    });
+    await _loadCommunity();
   }
 
   Future<void> _openDirectChat(StoryItem person) async {
@@ -531,10 +551,7 @@ class _CommunityPageState extends State<CommunityPage> {
               _InlineStoryAvatar(
                 label: label,
                 imageUrl: person.avatarUrl,
-                viewed: StorySeenStore.isSeen(
-                  authorId: person.authorId,
-                  label: label,
-                ),
+                viewed: person.isViewed,
                 hasStory: hasStory,
                 onTap: hasStory ? () => _openInlineStory(person) : null,
               ),

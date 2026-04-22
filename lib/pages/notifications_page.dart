@@ -31,6 +31,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   List<PostItem> _notificationPosts = <PostItem>[];
   Map<String, int> _authorStreaks = <String, int>{};
   Set<String> _activeStoryAuthors = <String>{};
+  Map<String, List<String>> _activeStoryIdsByAuthor = <String, List<String>>{};
   bool _loading = true;
 
   @override
@@ -71,11 +72,25 @@ class _NotificationsPageState extends State<NotificationsPage> {
           )
           .map((PostItem post) => post.authorId)
           .toSet();
+      final Map<String, List<String>> activeStoryIdsByAuthor =
+          <String, List<String>>{};
+      for (final PostItem post in posts.where(
+        (PostItem post) =>
+            post.type == PostType.short &&
+            post.createdAt != null &&
+            post.createdAt!.isAfter(storyThreshold) &&
+            followingSinceByAuthor.containsKey(post.authorId),
+      )) {
+        activeStoryIdsByAuthor.putIfAbsent(post.authorId, () => <String>[]).add(
+          post.id,
+        );
+      }
       if (!mounted) return;
       setState(() {
         _notificationPosts = notificationPosts.take(30).toList();
         _authorStreaks = authorStreaks;
         _activeStoryAuthors = activeStoryAuthors;
+        _activeStoryIdsByAuthor = activeStoryIdsByAuthor;
       });
     } catch (_) {
       if (!mounted) return;
@@ -104,7 +119,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
         ),
       ),
     );
-    StorySeenStore.markSeen(authorId: post.authorId, label: post.name);
     if (!mounted) return;
     setState(() {});
   }
@@ -205,9 +219,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                           streakDays: _streakFromPost(post),
                                           viewedStory:
                                               hasStory &&
-                                              StorySeenStore.isSeen(
-                                                authorId: post.authorId,
-                                                label: post.name,
+                                              StorySeenStore.hasSeenAllStoryIds(
+                                                _activeStoryIdsByAuthor[post.authorId] ??
+                                                    const <String>[],
                                               ),
                                           onAvatarTap: hasStory
                                               ? () => _openStory(post)
