@@ -303,11 +303,6 @@ class JobApplicationService {
 
   bool _isDeadlineClosed(DateTime? deadline) {
     if (deadline == null) return false;
-    final DateTime today = DateTime.now();
-    final DateTime todayDateOnly =
-        DateTime(today.year, today.month, today.day);
-    final DateTime deadlineDateOnly =
-        DateTime(deadline.year, deadline.month, deadline.day);
-    return todayDateOnly.isAfter(deadlineDateOnly);
+    return DateTime.now().isAfter(deadline);
   }
 }

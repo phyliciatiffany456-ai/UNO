@@ -33,14 +33,7 @@ class _JobApplyPageState extends State<JobApplyPage> {
   bool get _isDeadlineClosed {
     final DateTime? deadline = widget.post.jobDeadline;
     if (deadline == null) return false;
-    final DateTime now = DateTime.now();
-    final DateTime todayDateOnly = DateTime(now.year, now.month, now.day);
-    final DateTime deadlineDateOnly = DateTime(
-      deadline.year,
-      deadline.month,
-      deadline.day,
-    );
-    return todayDateOnly.isAfter(deadlineDateOnly);
+    return DateTime.now().isAfter(deadline);
   }
 
   @override

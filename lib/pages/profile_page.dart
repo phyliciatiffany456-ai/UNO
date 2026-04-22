@@ -15,6 +15,7 @@ import '../widgets/profile_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
 import 'create_short_page.dart';
+import 'job_apply_page.dart';
 import 'notifications_page.dart';
 import 'post_zoom_page.dart';
 import 'profile_connections_page.dart';
@@ -277,8 +278,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                           Expanded(
-                            child: _TabText(
-                              label: 'Postingan',
+                            child: _TabIcon(
+                              icon: Icons.grid_on,
                               active: _activeTab == _ProfileTab.post,
                               onTap: () {
                                 setState(() {
@@ -488,6 +489,13 @@ class _ProfilePageState extends State<ProfilePage> {
     List<PostItem> visiblePosts,
     PostItem post,
   ) async {
+    if (_activeTab == _ProfileTab.job) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => JobApplyPage(post: post)),
+      );
+      return;
+    }
+
     if (_activeTab == _ProfileTab.video) {
       final int initialIndex = visiblePosts.indexWhere(
         (PostItem item) => item.id == post.id,

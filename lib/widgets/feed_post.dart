@@ -230,9 +230,8 @@ class _FeedPostState extends State<FeedPost> {
           ),
           if (post.imageCount > 0) ...[
             const SizedBox(height: 8),
-            SizedBox(
-              height: 220,
-              width: double.infinity,
+            AspectRatio(
+              aspectRatio: 5 / 6,
               child: Stack(
                 alignment: Alignment.bottomCenter,
                 children: [

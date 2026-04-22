@@ -127,7 +127,7 @@ class PostService {
         'job_location': _nullIfEmpty(jobLocation),
         'job_domicile': _nullIfEmpty(jobDomicile),
         'job_requirements': _nullIfEmpty(jobRequirements),
-        'job_deadline': _formatDateOnly(jobDeadline),
+        'job_deadline': jobDeadline?.toIso8601String(),
       });
     }
 
@@ -338,12 +338,5 @@ class PostService {
     final String trimmed = value.trim();
     if (trimmed.isEmpty) return null;
     return trimmed;
-  }
-
-  String? _formatDateOnly(DateTime? value) {
-    if (value == null) return null;
-    final String month = value.month.toString().padLeft(2, '0');
-    final String day = value.day.toString().padLeft(2, '0');
-    return '${value.year}-$month-$day';
   }
 }

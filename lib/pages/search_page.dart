@@ -6,8 +6,10 @@ import '../models/post_streak.dart';
 import '../navigation/app_routes.dart';
 import '../services/post_service.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/story_ring_avatar.dart';
 import '../widgets/top_bar.dart';
 import 'create_post_page.dart';
+import 'job_apply_page.dart';
 import 'notifications_page.dart';
 import 'post_zoom_page.dart';
 
@@ -77,10 +79,31 @@ class _SearchPageState extends State<SearchPage> {
     if (query.isEmpty) return _allPosts;
 
     return _allPosts.where((PostItem post) {
-      return post.name.toLowerCase().contains(query) ||
-          post.role.toLowerCase().contains(query) ||
-          post.content.toLowerCase().contains(query);
+      final List<String> searchableFields = <String>[
+        post.name,
+        post.role,
+        post.content,
+        post.jobTitle ?? '',
+        post.jobLocation ?? '',
+        post.jobDomicile ?? '',
+        post.jobRequirements ?? '',
+        _typeLabel(post),
+      ];
+      return searchableFields.any(
+        (String field) => field.toLowerCase().contains(query),
+      );
     }).toList();
+  }
+
+  String _typeLabel(PostItem post) {
+    switch (post.type) {
+      case PostType.job:
+        return 'loker';
+      case PostType.short:
+        return 'short';
+      case PostType.insight:
+        return 'postingan';
+    }
   }
 
   void _openCreate(BuildContext context) {
@@ -95,6 +118,23 @@ class _SearchPageState extends State<SearchPage> {
     ).push(MaterialPageRoute<void>(builder: (_) => const NotificationsPage()));
   }
 
+  String _postSubtitle(PostItem post) {
+    final String content = post.content.trim();
+    if (content.isNotEmpty) {
+      return '${post.role} - $content';
+    }
+    return post.role;
+  }
+
+  String _jobSubtitle(PostItem post) {
+    final List<String> parts = <String>[
+      post.name,
+      if ((post.jobLocation ?? '').trim().isNotEmpty) post.jobLocation!.trim(),
+      if ((post.jobDomicile ?? '').trim().isNotEmpty) post.jobDomicile!.trim(),
+    ];
+    return parts.join(' - ');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,99 +146,111 @@ class _SearchPageState extends State<SearchPage> {
               onSearchTap: () {},
             ),
             const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF13151A),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF24262E)),
-                ),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _controller,
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      cursorColor: const Color(0xFFFF6A2D),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        hintText: 'Cari user, short, atau loker',
-                        hintStyle: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                        ),
-                        suffixIcon: const Icon(
-                          Icons.search,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFF0E1014),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: Color(0xFF2D313B)),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: Color(0xFFFF6A2D)),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (_loading)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    else if (_filteredPosts.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text(
-                          'Belum ada hasil untuk pencarian ini.',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                      )
-                    else
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 420),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: _filteredPosts.length,
-                          separatorBuilder:
-                              (BuildContext context, int index) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (BuildContext context, int index) {
-                            final PostItem post = _filteredPosts[index];
-                            return _SearchTile(
-                              username: post.name,
-                              text: post.role,
-                              streakDays: _authorStreaks[post.authorId],
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => PostZoomPage(post: post),
-                                  ),
-                                );
-                              },
-                            );
-                          },
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF13151A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF24262E)),
+                  ),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _controller,
+                        autofocus: true,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        cursorColor: const Color(0xFFFF6A2D),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          hintText: 'Cari user, postingan, atau loker',
+                          hintStyle: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                          suffixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFF0E1014),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Color(0xFF2D313B)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Color(0xFFFF6A2D)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
-                  ],
+                      const SizedBox(height: 10),
+                      if (_loading)
+                        const Expanded(
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      else if (_filteredPosts.isEmpty)
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'Belum ada hasil untuk pencarian ini.',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: _filteredPosts.length,
+                            separatorBuilder:
+                                (BuildContext context, int index) =>
+                                    const SizedBox(height: 8),
+                            itemBuilder: (BuildContext context, int index) {
+                              final PostItem post = _filteredPosts[index];
+                              return _SearchTile(
+                                title: post.type == PostType.job
+                                    ? (post.jobTitle?.trim().isNotEmpty == true
+                                          ? post.jobTitle!
+                                          : post.content)
+                                    : post.name,
+                                subtitle: post.type == PostType.job
+                                    ? _jobSubtitle(post)
+                                    : _postSubtitle(post),
+                                badge: _typeLabel(post),
+                                avatarUrl: post.avatarUrl,
+                                label: post.name,
+                                streakDays: _authorStreaks[post.authorId],
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => post.type == PostType.job
+                                          ? JobApplyPage(post: post)
+                                          : PostZoomPage(post: post),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const Spacer(),
           ],
         ),
       ),
@@ -216,14 +268,20 @@ class _SearchPageState extends State<SearchPage> {
 
 class _SearchTile extends StatelessWidget {
   const _SearchTile({
-    required this.username,
-    required this.text,
+    required this.title,
+    required this.subtitle,
+    required this.badge,
+    required this.avatarUrl,
+    required this.label,
     required this.streakDays,
     required this.onTap,
   });
 
-  final String username;
-  final String text;
+  final String title;
+  final String subtitle;
+  final String badge;
+  final String? avatarUrl;
+  final String label;
   final int? streakDays;
   final VoidCallback onTap;
 
@@ -241,21 +299,12 @@ class _SearchTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFFFF4B4B), Color(0xFFFF2B2B)],
-                ),
-              ),
-              child: const Center(
-                child: CircleAvatar(
-                  radius: 12,
-                  backgroundColor: Color(0xFFE5E7EB),
-                ),
-              ),
+            StoryRingProfileAvatar(
+              size: 32,
+              viewed: false,
+              hasStory: false,
+              label: label,
+              imageUrl: avatarUrl,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -263,7 +312,7 @@ class _SearchTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    username,
+                    title,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -272,7 +321,7 @@ class _SearchTile extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    text,
+                    subtitle,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFF9CA3AF),
@@ -283,6 +332,23 @@ class _SearchTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1C22),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFF2D313B)),
+              ),
+              child: Text(
+                badge,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             Column(
               children: [
                 Icon(

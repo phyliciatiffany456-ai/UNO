@@ -36,6 +36,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   String selectedAccessibility = 'Public';
   bool _isPosting = false;
   List<XFile> _selectedImages = <XFile>[];
+  DateTime? _selectedJobDeadline;
 
   @override
   void dispose() {
@@ -70,7 +71,16 @@ class _CreatePostPageState extends State<CreatePostPage> {
     );
     if (files.isEmpty) return;
     setState(() {
-      _selectedImages = files;
+      final List<XFile> mergedImages = List<XFile>.from(_selectedImages);
+      for (final XFile file in files) {
+        final bool alreadySelected = mergedImages.any(
+          (XFile existing) => existing.path == file.path,
+        );
+        if (!alreadySelected) {
+          mergedImages.add(file);
+        }
+      }
+      _selectedImages = mergedImages;
     });
   }
 
@@ -101,7 +111,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
         jobLocation: _jobLocationController.text.trim(),
         jobDomicile: _jobDomicileController.text.trim(),
         jobRequirements: _jobRequirementsController.text.trim(),
-        jobDeadline: DateTime.tryParse(_jobDeadlineController.text.trim()),
+        jobDeadline: _selectedJobDeadline,
       );
       if (!mounted) return;
       _showMessage('Postingan berhasil dipublikasikan.');
@@ -158,9 +168,49 @@ class _CreatePostPageState extends State<CreatePostPage> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _pickJobDeadline() async {
+    final DateTime now = DateTime.now();
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedJobDeadline ?? now,
+      firstDate: now,
+      lastDate: DateTime(now.year + 5),
     );
+    if (pickedDate == null || !mounted) return;
+
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _selectedJobDeadline != null
+          ? TimeOfDay.fromDateTime(_selectedJobDeadline!)
+          : TimeOfDay.now(),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    final DateTime deadline = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    setState(() {
+      _selectedJobDeadline = deadline;
+      _jobDeadlineController.text = _formatDeadline(deadline);
+    });
+  }
+
+  String _formatDeadline(DateTime value) {
+    final String day = value.day.toString().padLeft(2, '0');
+    final String month = value.month.toString().padLeft(2, '0');
+    final String hour = value.hour.toString().padLeft(2, '0');
+    final String minute = value.minute.toString().padLeft(2, '0');
+    return '$day/$month/${value.year} $hour:$minute';
   }
 
   @override
@@ -217,7 +267,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              'Tap untuk pilih gambar',
+                              'Tap untuk pilih satu atau beberapa gambar',
                               style: TextStyle(
                                 color: Color(0xFF2D313B),
                                 fontSize: 13,
@@ -233,8 +283,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.all(8),
                             itemCount: _selectedImages.length,
-                            separatorBuilder: (BuildContext context, int index) =>
-                                const SizedBox(width: 8),
+                            separatorBuilder:
+                                (BuildContext context, int index) =>
+                                    const SizedBox(width: 8),
                             itemBuilder: (BuildContext context, int index) {
                               final XFile image = _selectedImages[index];
                               return Stack(
@@ -282,6 +333,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+              child: Text(
+                _selectedImages.isEmpty
+                    ? 'Kamu bisa pilih lebih dari 1 gambar.'
+                    : '${_selectedImages.length} gambar dipilih. Tap ikon + untuk menambah lagi.',
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
               child: Row(
                 children: [
                   Expanded(
@@ -314,9 +374,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
                       },
                     ),
                   ),
-                  ],
-                ),
+                ],
               ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: Text(
@@ -355,8 +415,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     const SizedBox(height: 8),
                     _DescriptionField(
                       controller: _jobDeadlineController,
-                      hint: 'Deadline (YYYY-MM-DD)',
+                      hint: 'Deadline lamaran',
                       height: 52,
+                      readOnly: true,
+                      onTap: _pickJobDeadline,
+                      trailing: const Icon(
+                        Icons.schedule,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     _DescriptionField(
@@ -473,7 +540,11 @@ class _CreateDropdownField extends StatelessWidget {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
-          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+          icon: const Icon(
+            Icons.keyboard_arrow_down,
+            color: Colors.white,
+            size: 18,
+          ),
           dropdownColor: const Color(0xFF1A1C22),
           style: const TextStyle(color: Colors.white, fontSize: 12),
           isExpanded: true,
@@ -499,14 +570,34 @@ class _DescriptionField extends StatelessWidget {
     required this.controller,
     this.hint = 'Deskripsi',
     this.height = 90,
+    this.readOnly = false,
+    this.onTap,
+    this.trailing,
   });
 
   final TextEditingController controller;
   final String hint;
   final double height;
+  final bool readOnly;
+  final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final Widget textInput = TextField(
+      controller: controller,
+      maxLines: height <= 60 ? 1 : null,
+      readOnly: readOnly,
+      onTap: onTap,
+      style: const TextStyle(color: Colors.white, fontSize: 12),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white70, fontSize: 12),
+        border: InputBorder.none,
+        isCollapsed: true,
+      ),
+    );
+
     return Container(
       height: height,
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
@@ -514,16 +605,15 @@ class _DescriptionField extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFF3D00)),
       ),
-      child: TextField(
-        controller: controller,
-        maxLines: null,
-        style: const TextStyle(color: Colors.white, fontSize: 12),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: Colors.white70, fontSize: 12),
-          border: InputBorder.none,
-          isCollapsed: true,
-        ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: textInput),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            Padding(padding: const EdgeInsets.only(top: 1), child: trailing!),
+          ],
+        ],
       ),
     );
   }
