@@ -2,6 +2,19 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "UNO (Android Emulator)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "env": {
+        "TEMP": "D:\\FlutterTemp",
+        "TMP": "D:\\FlutterTemp"
+      },
+      "args": [
+        "--dart-define-from-file=.vscode/supabase.local.json"
+      ]
+    },
+    {
       "name": "UNO (Chrome)",
       "request": "launch",
       "type": "dart",
